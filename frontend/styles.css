@@ -1,20 +1,20 @@
 :root {
-  --bg-dark: #0b0e14;
-  --bg-card: #151922;
-  --bg-card-hover: #1c222e;
-  --border: #232a38;
-  --border-light: #2e3748;
-  --text-main: #e6edf3;
-  --text-muted: #8b949e;
-  --text-dim: #545d68;
-  --accent-gold: #e5b342;
-  --accent-gold-glow: rgba(229, 179, 66, 0.25);
-  --green: #26a69a;
-  --green-glow: rgba(38, 166, 154, 0.2);
-  --red: #ef5350;
-  --red-glow: rgba(239, 83, 80, 0.2);
+  --bg-dark: #090c10;
+  --bg-card: #12161f;
+  --bg-card-hover: #19202c;
+  --border: #222a36;
+  --border-light: #323d4f;
+  --text-main: #f0f3f6;
+  --text-muted: #9aa1b0;
+  --text-dim: #6d7585;
+  --accent-gold: #f5b338;
+  --accent-gold-glow: rgba(245, 179, 56, 0.25);
+  --green: #089981;
+  --green-glow: rgba(8, 153, 129, 0.2);
+  --red: #f23645;
+  --red-glow: rgba(242, 54, 69, 0.2);
   --blue: #29b6f6;
-  --purple: #ab47bc;
+  --purple: #ba68c8;
   --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --font-mono: "JetBrains Mono", Consolas, "Courier New", monospace;
 }
@@ -270,7 +270,94 @@ header {
   overflow: hidden;
 }
 
-/* Chart Container */
+/* Chart Panel Layout */
+.chart-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+  background: var(--bg-dark);
+}
+
+/* Dedicated Top Toolbar Bar for Overlays */
+.chart-toolbar-bar {
+  height: 38px;
+  background: #10141d;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  gap: 12px;
+  flex-shrink: 0;
+  overflow-x: auto;
+  user-select: none;
+}
+
+.toolbar-section-title {
+  color: var(--text-muted);
+  font-weight: 700;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.toolbar-toggles-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: nowrap;
+}
+
+.toggle-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  border-radius: 4px;
+  background: #161c27;
+  border: 1px solid var(--border);
+  color: var(--text-main);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.toggle-pill:hover {
+  background: #1f2736;
+  border-color: var(--border-light);
+}
+
+.toggle-pill input[type="checkbox"] {
+  accent-color: var(--accent-gold);
+  width: 13px;
+  height: 13px;
+  cursor: pointer;
+  margin: 0;
+}
+
+.toggle-pill .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.toggle-pill .dot.htf-fvg { background: #f5b338; }
+.toggle-pill .dot.ltf-fvg { background: #089981; }
+.toggle-pill .dot.ob { background: #ba68c8; }
+.toggle-pill .dot.liq { background: #29b6f6; }
+.toggle-pill .dot.tl { background: #ff9800; }
+.toggle-pill .dot.psych { background: #ffa726; }
+.toggle-pill .dot.swings { background: #00e676; }
+.toggle-pill .dot.vol { background: #7986cb; }
+
+/* Chart Canvas Container */
 .chart-container {
   flex: 1;
   position: relative;
@@ -285,43 +372,37 @@ header {
 
 .chart-overlay-legend {
   position: absolute;
-  top: 12px;
+  top: 10px;
   left: 12px;
-  background: rgba(21, 25, 34, 0.85);
+  background: rgba(14, 18, 26, 0.88);
   backdrop-filter: blur(8px);
   border: 1px solid var(--border);
   border-radius: 6px;
-  padding: 8px 12px;
+  padding: 6px 12px;
   z-index: 10;
   font-size: 11px;
   pointer-events: none;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.legend-header-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 .legend-title {
   font-weight: 700;
-  color: #fff;
-  margin-bottom: 4px;
+  color: var(--text-main);
   font-size: 12px;
+  letter-spacing: 0.3px;
 }
 
-.legend-items {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
+.legend-ohlc {
   color: var(--text-muted);
   font-family: var(--font-mono);
-}
-
-.legend-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.legend-color {
-  width: 10px;
-  height: 10px;
-  border-radius: 2px;
+  font-size: 11px;
+  font-weight: 500;
 }
 
 /* Sidebar */
@@ -578,45 +659,7 @@ header {
   color: #4fc3f7;
 }
 
-/* Chart Controls Toolbar */
-.chart-controls-toolbar {
-  position: absolute;
-  top: 10px;
-  right: 12px;
-  z-index: 10;
-  background: rgba(21, 25, 34, 0.85);
-  backdrop-filter: blur(4px);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 4px 10px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  font-size: 11px;
-}
 
-.toolbar-title {
-  color: var(--text-dim);
-  font-weight: 600;
-}
-
-.toggle-label {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  cursor: pointer;
-  color: var(--text-muted);
-  user-select: none;
-}
-
-.toggle-label:hover {
-  color: var(--text-main);
-}
-
-.toggle-label input[type="checkbox"] {
-  accent-color: var(--accent-gold);
-  cursor: pointer;
-}
 
 /* Order Block Card styling */
 .type-ob {

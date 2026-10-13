@@ -25,6 +25,7 @@ const layerToggles = {
   trendlines: true,
   psych: true,
   swings: true,
+  volume: true,
 };
 
 // Elements
@@ -85,41 +86,43 @@ function initChart() {
     width: container.clientWidth,
     height: container.clientHeight,
     layout: {
-      backgroundColor: "#0b0e14",
-      textColor: "#8b949e",
+      backgroundColor: "#090c10",
+      textColor: "#b2b5be",
       fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
       fontSize: 11,
     },
     grid: {
-      vertLines: { color: "#161b24" },
-      horzLines: { color: "#161b24" },
+      vertLines: { color: "#161c26" },
+      horzLines: { color: "#161c26" },
     },
     crosshair: {
       mode: LightweightCharts.CrosshairMode.Normal,
     },
     rightPriceScale: {
-      borderColor: "#232a38",
+      borderColor: "#222a36",
       autoScale: true,
-      scaleMargins: { top: 0.1, bottom: 0.2 },
+      scaleMargins: { top: 0.08, bottom: 0.18 },
     },
     timeScale: {
-      borderColor: "#232a38",
+      borderColor: "#222a36",
       timeVisible: true,
       secondsVisible: false,
     },
   });
 
-  // Candlestick series
+  // Candlestick series (rich, thick, crisp high-contrast TradingView colors)
   candleSeries = chart.addCandlestickSeries({
-    upColor: "#26a69a",
-    downColor: "#ef5350",
-    borderVisible: false,
-    wickUpColor: "#26a69a",
-    wickDownColor: "#ef5350",
+    upColor: "#089981",
+    downColor: "#f23645",
+    borderVisible: true,
+    borderUpColor: "#089981",
+    borderDownColor: "#f23645",
+    wickUpColor: "#089981",
+    wickDownColor: "#f23645",
     priceFormat: { type: "price", precision: 2, minMove: 0.01 },
   });
 
-  // Volume series
+  // Volume series (toggleable)
   volumeSeries = chart.addHistogramSeries({
     color: "#26a69a",
     priceFormat: { type: "volume" },
@@ -436,11 +439,31 @@ function drawChartMarkers(analysis) {
 }
 
 // 4b. Render Key-Level Activation & Trade-Readiness Watchlist
-function renderWatchlist(analysis) {
+async function renderWatchlist(analysis) {
   if (!analysis) return;
 
-  const watchlist = analysis.watchlist || [];
-  const alerts = analysis.active_alerts || [];
+  let watchlist = analysis.watchlist || [];
+  let alerts = analysis.active_alerts || [];
+
+  // Fallback: If watchlist array is empty, fetch directly from /api/watchlist
+  if (!watchlist.length) {
+    try {
+      const resp = await fetch(`/api/watchlist?timeframe=${currentTf}`);
+      if (resp.ok) {
+        const wlData = await resp.json();
+        if (wlData.success && wlData.watchlist && wlData.watchlist.length) {
+          watchlist = wlData.watchlist;
+          alerts = wlData.active_alerts || alerts;
+          if (currentAnalysis) {
+            currentAnalysis.watchlist = watchlist;
+            currentAnalysis.active_alerts = alerts;
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("Watchlist fallback fetch failed:", e);
+    }
+  }
 
   renderAlerts(alerts);
 
@@ -935,6 +958,7 @@ function setupToggleListeners() {
     { id: "togTrendlines", key: "trendlines" },
     { id: "togPsych", key: "psych" },
     { id: "togSwings", key: "swings" },
+    { id: "togVolume", key: "volume" },
   ];
 
   mapping.forEach(({ id, key }) => {
@@ -942,6 +966,10 @@ function setupToggleListeners() {
     if (el) {
       el.addEventListener("change", (e) => {
         layerToggles[key] = e.target.checked;
+        if (key === "volume" && volumeSeries) {
+          volumeSeries.applyOptions({ visible: e.target.checked });
+          return;
+        }
         if (currentAnalysis) {
           clearOverlayLines();
           drawSMCLevels(currentAnalysis);
@@ -994,6 +1022,7 @@ function connectWebSocket() {
           currentAnalysis = data.analysis;
           renderMarketOverview(data.analysis);
           renderSidebarData(data.analysis);
+          renderWatchlist(data.analysis);
         }
       }
     } catch (e) {
@@ -1033,6 +1062,9 @@ document.querySelectorAll(".tab-btn").forEach((btn) => {
     const tabId = btn.getAttribute("data-tab");
     const pane = document.getElementById(tabId);
     if (pane) pane.style.display = "block";
+    if (tabId === "tab-watchlist" && currentAnalysis) {
+      renderWatchlist(currentAnalysis);
+    }
   });
 });
 

@@ -14,6 +14,18 @@ let activeMarkers = [];
 let ws = null;
 let lastUpdateTs = 0;
 let lastCandleTs = 0;
+let currentAnalysis = null;
+
+// Overlay Layer Toggles
+const layerToggles = {
+  htfFvg: true,
+  ltfFvg: true,
+  orderBlocks: true,
+  liquidity: true,
+  trendlines: true,
+  psych: true,
+  swings: true,
+};
 
 // Elements
 const headerPrice = document.getElementById("headerPrice");
@@ -40,8 +52,20 @@ const h4FvgCount = document.getElementById("h4FvgCount");
 const liquidityBody = document.getElementById("liquidityBody");
 const bosBody = document.getElementById("bosBody");
 const bosCount = document.getElementById("bosCount");
-const srBody = document.getElementById("srBody");
+const obBody = document.getElementById("obBody");
+const obCount = document.getElementById("obCount");
+const premDiscBody = document.getElementById("premDiscBody");
+const trendlineBody = document.getElementById("trendlineBody");
+const tlCount = document.getElementById("tlCount");
 const opposingAlertsArea = document.getElementById("opposingAlertsArea");
+
+// Market Overview Bar elements
+const ovDailyTrend = document.getElementById("ovDailyTrend");
+const ovH4Trend = document.getElementById("ovH4Trend");
+const ovDealingRange = document.getElementById("ovDealingRange");
+const ovNearestAbove = document.getElementById("ovNearestAbove");
+const ovNearestBelow = document.getElementById("ovNearestBelow");
+const ovOteStatus = document.getElementById("ovOteStatus");
 
 // 1. Initialize Lightweight Chart
 function initChart() {
@@ -110,13 +134,14 @@ function initChart() {
       chart.applyOptions({ width: container.clientWidth, height: container.clientHeight });
     }
   });
+
+  setupToggleListeners();
 }
 
 // 2. Fetch & Render SMC Data for Selected Timeframe
 async function loadSMCData(timeframe) {
   try {
     currentTf = timeframe.toUpperCase();
-    statTimeframe.textContent = currentTf;
     legendTitle.textContent = `XAUTUSD · ${currentTf} · DELTA INDIA`;
 
     const res = await fetch(`/api/smc?timeframe=${currentTf}`);
@@ -124,7 +149,9 @@ async function loadSMCData(timeframe) {
     const data = await res.json();
 
     if (data.success) {
+      currentAnalysis = data.analysis;
       updateStatusPanel(data.status);
+      renderMarketOverview(data.analysis);
       renderChartData(data.analysis);
       renderSidebarData(data.analysis);
     }
@@ -134,9 +161,60 @@ async function loadSMCData(timeframe) {
   }
 }
 
-// 3. Render Chart Candles & Overlays
+// 3. Render Market Overview Bar
+function renderMarketOverview(analysis) {
+  if (!analysis) return;
+  const ms = analysis.market_state || {};
+
+  if (ovDailyTrend) {
+    const dt = ms.daily_trend || "Undetermined";
+    ovDailyTrend.textContent = dt.toUpperCase();
+    ovDailyTrend.className = `overview-val ${dt === "bullish" ? "bullish" : dt === "bearish" ? "bearish" : ""}`;
+  }
+
+  if (ovH4Trend) {
+    const ht = ms.h4_trend || "Undetermined";
+    ovH4Trend.textContent = ht.toUpperCase();
+    ovH4Trend.className = `overview-val ${ht === "bullish" ? "bullish" : ht === "bearish" ? "bearish" : ""}`;
+  }
+
+  if (ovDealingRange) {
+    const pos = ms.daily_position || "Equilibrium";
+    const pct = ms.daily_position_pct || 50;
+    ovDealingRange.textContent = `${pos.toUpperCase()} (${pct}%)`;
+  }
+
+  if (ovNearestAbove) {
+    if (ms.nearest_level_above_price) {
+      ovNearestAbove.textContent = `$${ms.nearest_level_above_price.toFixed(2)}`;
+      ovNearestAbove.title = ms.nearest_level_above || "";
+    } else {
+      ovNearestAbove.textContent = "None nearby";
+    }
+  }
+
+  if (ovNearestBelow) {
+    if (ms.nearest_level_below_price) {
+      ovNearestBelow.textContent = `$${ms.nearest_level_below_price.toFixed(2)}`;
+      ovNearestBelow.title = ms.nearest_level_below || "";
+    } else {
+      ovNearestBelow.textContent = "None nearby";
+    }
+  }
+
+  if (ovOteStatus) {
+    if (ms.in_ote_zone) {
+      ovOteStatus.textContent = "INSIDE OTE ZONE";
+      ovOteStatus.style.color = "var(--accent-gold)";
+    } else {
+      ovOteStatus.textContent = "Outside OTE";
+      ovOteStatus.style.color = "var(--text-muted)";
+    }
+  }
+}
+
+// 4. Render Chart Candles & Overlays
 function renderChartData(analysis) {
-  // Fetch candles directly to ensure full set
   fetch(`/api/candles?timeframe=${currentTf}`)
     .then((r) => r.json())
     .then((cData) => {
@@ -160,13 +238,14 @@ function renderChartData(analysis) {
       candleSeries.setData(chartCandles);
       volumeSeries.setData(chartVolumes);
 
-      // Clear previous overlay lines
       clearOverlayLines();
-
-      // Draw Key Overlays
       drawSMCLevels(analysis);
 
-      // Update current price
+      // Markers for Swings / BoS
+      if (layerToggles.swings) {
+        drawChartMarkers(analysis);
+      }
+
       const last = candles[candles.length - 1];
       if (last) {
         headerPrice.textContent = last.close.toFixed(2);
@@ -184,68 +263,170 @@ function clearOverlayLines() {
 }
 
 function drawSMCLevels(analysis) {
-  // 1. Draw Previous Day High/Low
-  const liqs = analysis.liquidity_levels || [];
-  liqs.forEach((l) => {
-    if (l.type === "PDH" || l.type === "PDL") {
+  // 1. Liquidity Levels (PDH, PDL, PWH, PWL)
+  if (layerToggles.liquidity) {
+    const liqs = analysis.liquidity_levels || [];
+    liqs.forEach((l) => {
+      if (l.type === "PDH" || l.type === "PDL") {
+        const line = candleSeries.createPriceLine({
+          price: l.price,
+          color: l.type === "PDH" ? "#29b6f6" : "#0288d1",
+          lineWidth: 1,
+          lineStyle: LightweightCharts.LineStyle.Dashed,
+          axisLabelVisible: true,
+          title: `${l.type} (${l.swept ? "SWEPT" : "ACTIVE"})`,
+        });
+        activeLines.push(line);
+      } else if (l.type === "PWH" || l.type === "PWL") {
+        const line = candleSeries.createPriceLine({
+          price: l.price,
+          color: "#26c6da",
+          lineWidth: 1,
+          lineStyle: LightweightCharts.LineStyle.Dotted,
+          axisLabelVisible: true,
+          title: `${l.type}`,
+        });
+        activeLines.push(line);
+      }
+    });
+  }
+
+  // 2. Higher Timeframe FVGs (1D & 4H)
+  if (layerToggles.htfFvg) {
+    const htfFvgs = [...(analysis.daily_fvgs || []), ...(analysis.h4_fvgs || [])];
+    htfFvgs.forEach((f) => {
+      if (!f.mitigated && !f.inverted) {
+        // 50% Midpoint POI line
+        const midLine = candleSeries.createPriceLine({
+          price: f.midpoint,
+          color: "#e5b342",
+          lineWidth: 1,
+          lineStyle: LightweightCharts.LineStyle.SparseDotted,
+          axisLabelVisible: true,
+          title: `${f.timeframe} ${f.direction[0].toUpperCase()} FVG 50%`,
+        });
+        activeLines.push(midLine);
+
+        // Boundary lines
+        const topBound = candleSeries.createPriceLine({
+          price: f.top,
+          color: f.direction === "bullish" ? "rgba(38, 166, 154, 0.4)" : "rgba(239, 83, 80, 0.4)",
+          lineWidth: 1,
+          lineStyle: LightweightCharts.LineStyle.Dotted,
+          axisLabelVisible: false,
+        });
+        const botBound = candleSeries.createPriceLine({
+          price: f.bottom,
+          color: f.direction === "bullish" ? "rgba(38, 166, 154, 0.4)" : "rgba(239, 83, 80, 0.4)",
+          lineWidth: 1,
+          lineStyle: LightweightCharts.LineStyle.Dotted,
+          axisLabelVisible: false,
+        });
+        activeLines.push(topBound, botBound);
+      }
+    });
+  }
+
+  // 3. Current Timeframe FVGs
+  if (layerToggles.ltfFvg && currentTf !== "1D" && currentTf !== "4H") {
+    (analysis.timeframe_fvgs || []).slice(-4).forEach((f) => {
+      if (!f.mitigated && !f.inverted) {
+        const midLine = candleSeries.createPriceLine({
+          price: f.midpoint,
+          color: f.direction === "bullish" ? "rgba(38, 166, 154, 0.8)" : "rgba(239, 83, 80, 0.8)",
+          lineWidth: 1,
+          lineStyle: LightweightCharts.LineStyle.Dotted,
+          axisLabelVisible: true,
+          title: `${f.timeframe} FVG 50%`,
+        });
+        activeLines.push(midLine);
+      }
+    });
+  }
+
+  // 4. Order Blocks (Active zones)
+  if (layerToggles.orderBlocks) {
+    (analysis.order_blocks || []).slice(-3).forEach((ob) => {
+      if (!ob.mitigated && !ob.is_breaker) {
+        const obLine = candleSeries.createPriceLine({
+          price: ob.midpoint,
+          color: "#ab47bc",
+          lineWidth: 1,
+          lineStyle: LightweightCharts.LineStyle.Dashed,
+          axisLabelVisible: true,
+          title: `${ob.timeframe} ${ob.direction[0].toUpperCase()} OB Mid`,
+        });
+        activeLines.push(obLine);
+      }
+    });
+  }
+
+  // 5. Psychological 20s and 80s Levels
+  if (layerToggles.psych) {
+    const psychs = analysis.psychological_levels || [];
+    psychs.slice(0, 2).forEach((p) => {
       const line = candleSeries.createPriceLine({
-        price: l.price,
-        color: l.type === "PDH" ? "#29b6f6" : "#0288d1",
-        lineWidth: 1,
-        lineStyle: LightweightCharts.LineStyle.Dashed,
-        axisLabelVisible: true,
-        title: `${l.type} (${l.swept ? "SWEPT" : "UNSWEPT"})`,
-      });
-      activeLines.push(line);
-    } else if (l.type === "PWH" || l.type === "PWL") {
-      const line = candleSeries.createPriceLine({
-        price: l.price,
-        color: "#26c6da",
+        price: p.price,
+        color: "#ff9800",
         lineWidth: 1,
         lineStyle: LightweightCharts.LineStyle.Dotted,
-        axisLabelVisible: true,
-        title: `${l.type}`,
+        axisLabelVisible: false,
+        title: `Round ${p.level_type}`,
       });
       activeLines.push(line);
-    }
-  });
-
-  // 2. Draw Unmitigated HTF FVG Midpoints (50% Equilibrium POI)
-  const htfFvgs = [...(analysis.daily_fvgs || []), ...(analysis.h4_fvgs || [])];
-  htfFvgs.forEach((f) => {
-    if (!f.mitigated) {
-      const color = f.direction === "bullish" ? "#26a69a" : "#ef5350";
-      // 50% Midpoint POI
-      const midLine = candleSeries.createPriceLine({
-        price: f.midpoint,
-        color: "#e5b342",
-        lineWidth: 1,
-        lineStyle: LightweightCharts.LineStyle.SparseDotted,
-        axisLabelVisible: true,
-        title: `${f.timeframe} ${f.direction[0].toUpperCase()} FVG 50% POI`,
-      });
-      activeLines.push(midLine);
-    }
-  });
-
-  // 3. Draw Psychological 20s & 80s Levels (Nearest 2)
-  const psychs = analysis.psychological_levels || [];
-  psychs.slice(0, 2).forEach((p) => {
-    const line = candleSeries.createPriceLine({
-      price: p.price,
-      color: "#ab47bc",
-      lineWidth: 1,
-      lineStyle: LightweightCharts.LineStyle.Dotted,
-      axisLabelVisible: false,
-      title: `Round ${p.level_type}`,
     });
-    activeLines.push(line);
-  });
+  }
+
+  // 6. Trendlines projected price
+  if (layerToggles.trendlines) {
+    (analysis.trendlines || []).forEach((tl) => {
+      if (!tl.broken && tl.current_projected_price) {
+        const line = candleSeries.createPriceLine({
+          price: tl.current_projected_price,
+          color: tl.direction === "resistance" ? "#ef5350" : "#26a69a",
+          lineWidth: 1,
+          lineStyle: LightweightCharts.LineStyle.LargeDashed,
+          axisLabelVisible: true,
+          title: `${tl.timeframe} TL (${tl.touch_count}T)`,
+        });
+        activeLines.push(line);
+      }
+    });
+  }
 }
 
-// 4. Render Sidebar Tables & Rules
+function drawChartMarkers(analysis) {
+  const markers = [];
+
+  // Swing markers
+  (analysis.swings || []).slice(-8).forEach((s) => {
+    markers.push({
+      time: s.time,
+      position: s.type === "high" ? "aboveBar" : "belowBar",
+      color: s.type === "high" ? "#ef5350" : "#26a69a",
+      shape: s.type === "high" ? "arrowDown" : "arrowUp",
+      text: s.label || (s.type === "high" ? "SH" : "SL"),
+    });
+  });
+
+  // Structure breaks (BoS / CHoCH)
+  (analysis.bos_signals || []).slice(-4).forEach((b) => {
+    markers.push({
+      time: b.time,
+      position: b.type === "bullish" ? "aboveBar" : "belowBar",
+      color: b.kind === "CHoCH" ? "#ffeb3b" : "#4fc3f7",
+      shape: "circle",
+      text: `${b.kind} (${b.retracement_pct}%)`,
+    });
+  });
+
+  markers.sort((a, b) => a.time - b.time);
+  candleSeries.setMarkers(markers);
+}
+
+// 5. Render Sidebar Tables & Panels
 function renderSidebarData(analysis) {
-  // Opposing Warnings
+  // Opposing Zone Warnings
   opposingAlertsArea.innerHTML = "";
   if (analysis.opposing_warnings && analysis.opposing_warnings.length) {
     analysis.opposing_warnings.forEach((w) => {
@@ -258,7 +439,7 @@ function renderSidebarData(analysis) {
     });
   }
 
-  // Key Levels Table
+  // Key Levels Table (Ranked with Scores and Reasons)
   const levels = analysis.key_levels_summary || [];
   levelsCount.textContent = levels.length;
   levelsTableBody.innerHTML = "";
@@ -270,21 +451,58 @@ function renderSidebarData(analysis) {
       const tr = document.createElement("tr");
       const distSign = l.distance >= 0 ? `+${l.distance.toFixed(2)}` : l.distance.toFixed(2);
       const isNear = Math.abs(l.distance) < 20.0;
-      const typeClass = l.type.includes("FVG") ? "type-fvg" : l.type.includes("Liquidity") ? "type-liq" : "type-psych";
+      let typeClass = "type-fvg";
+      if (l.type.includes("Liquidity")) typeClass = "type-liq";
+      else if (l.type.includes("OB")) typeClass = "type-ob";
+      else if (l.type.includes("Psych")) typeClass = "type-psych";
 
-      let statusBadge = l.mitigation ? `<span style="color: var(--accent-gold); font-size: 10px;">${l.mitigation}</span>` : "";
-      if (l.swept !== undefined) {
-        statusBadge = l.swept ? `<span style="color: var(--green); font-size: 10px;">Swept</span>` : `<span style="color: var(--blue); font-size: 10px;">Active</span>`;
+      let statusInfo = "";
+      if (l.score) {
+        statusInfo = `<span class="score-badge" title="${l.score_reason}">Score: ${l.score}</span>`;
+      }
+      if (l.mitigation) {
+        statusInfo += ` <span style="font-size: 10px; color: var(--accent-gold);">${l.mitigation}</span>`;
+      } else if (l.swept !== undefined) {
+        statusInfo += l.swept ? ` <span style="color: var(--green); font-size: 10px;">Swept</span>` : ` <span style="color: var(--blue); font-size: 10px;">Active</span>`;
       }
 
       tr.innerHTML = `
-        <td><span class="type-tag ${typeClass}">${l.timeframe || ""}</span> <span style="font-weight: 500;">${l.name}</span></td>
-        <td style="font-weight: 600;">${l.price.toFixed(2)}</td>
+        <td><span class="type-tag ${typeClass}">${l.timeframe || ""}</span> <span style="font-weight: 500;" title="${l.score_reason || ''}">${l.name}</span></td>
+        <td style="font-weight: 600;">$${l.price.toFixed(2)}</td>
         <td class="${isNear ? "dist-near" : "dist-far"}">${distSign} (${l.distance_pct}%)</td>
-        <td>${statusBadge}</td>
+        <td>${statusInfo}</td>
       `;
       levelsTableBody.appendChild(tr);
     });
+  }
+
+  // Order Blocks
+  const obs = analysis.order_blocks || [];
+  if (obCount) obCount.textContent = obs.length;
+  if (obBody) {
+    obBody.innerHTML = "";
+    if (!obs.length) {
+      obBody.innerHTML = `<div style="color: var(--text-dim); font-size: 11px;">No active order blocks detected.</div>`;
+    } else {
+      obs.slice(-4).reverse().forEach((ob) => {
+        const div = document.createElement("div");
+        div.style.padding = "6px 0";
+        div.style.borderBottom = "1px solid rgba(35, 42, 56, 0.4)";
+        div.style.fontSize = "11px";
+        const dirCol = ob.direction === "bullish" ? "var(--green)" : "var(--red)";
+        div.innerHTML = `
+          <div style="display: flex; justify-content: space-between;">
+            <span style="font-weight: 600; color: ${dirCol};">${ob.timeframe} ${ob.direction.toUpperCase()} OB</span>
+            <span style="font-size: 10px; color: ${ob.mitigated ? "var(--text-dim)" : "var(--accent-gold);"}">${ob.mitigated ? "Mitigated" : "Active"}</span>
+          </div>
+          <div style="font-family: var(--font-mono); margin-top: 2px;">
+            Range: $${ob.bottom} - $${ob.top} | <strong>Mid: $${ob.midpoint}</strong>
+          </div>
+          <div style="color: var(--text-dim); font-size: 10px; margin-top: 2px;">Origin: ${ob.origin_ist || "N/A"}</div>
+        `;
+        obBody.appendChild(div);
+      });
+    }
   }
 
   // Psychological Levels
@@ -295,7 +513,7 @@ function renderSidebarData(analysis) {
     const distSign = p.distance >= 0 ? `+${p.distance.toFixed(2)}` : p.distance.toFixed(2);
     tr.innerHTML = `
       <td><span class="type-tag type-psych">Round ${p.level_type}</span></td>
-      <td style="font-weight: 600;">${p.price.toFixed(2)}</td>
+      <td style="font-weight: 600;">$${p.price.toFixed(2)}</td>
       <td>${distSign} (${p.distance_pct}%)</td>
     `;
     psychTableBody.appendChild(tr);
@@ -329,6 +547,42 @@ function renderSidebarData(analysis) {
   }
 
   // Market Structure Tab
+  // Premium / Discount Body
+  if (premDiscBody) {
+    const pd = analysis.premium_discount || {};
+    premDiscBody.innerHTML = `
+      <div style="font-size: 12px; margin-bottom: 4px;">
+        State: <strong style="color: ${pd.position === 'discount' ? 'var(--green)' : pd.position === 'premium' ? 'var(--red)' : 'var(--text-main)'};">${(pd.position || 'N/A').toUpperCase()}</strong> (${pd.position_pct || 50}%)
+      </div>
+      <div style="font-size: 11px; color: var(--text-muted);">${pd.description || ''}</div>
+    `;
+  }
+
+  // Trendlines Body
+  if (trendlineBody) {
+    const tls = analysis.trendlines || [];
+    if (tlCount) tlCount.textContent = tls.length;
+    trendlineBody.innerHTML = "";
+    if (!tls.length) {
+      trendlineBody.innerHTML = `<div style="color: var(--text-dim); font-size: 11px;">No validated trendlines currently active on this timeframe.</div>`;
+    } else {
+      tls.forEach((tl) => {
+        const div = document.createElement("div");
+        div.style.padding = "4px 0";
+        div.style.borderBottom = "1px solid rgba(35, 42, 56, 0.4)";
+        div.style.fontSize = "11px";
+        div.innerHTML = `
+          <div style="display: flex; justify-content: space-between;">
+            <span>${tl.timeframe} ${tl.direction.toUpperCase()} (${tl.touch_count} touches)</span>
+            <span style="font-weight: 600; color: ${tl.broken ? 'var(--red)' : 'var(--green)'};">${tl.broken ? 'Broken' : 'Intact'}</span>
+          </div>
+          <div style="color: var(--text-dim); font-size: 10px;">Projected Price: $${tl.current_projected_price || '--'}</div>
+        `;
+        trendlineBody.appendChild(div);
+      });
+    }
+  }
+
   // BoS List
   const bosList = analysis.bos_signals || [];
   bosCount.textContent = bosList.length;
@@ -345,7 +599,7 @@ function renderSidebarData(analysis) {
       div.innerHTML = `
         <div style="display: flex; justify-content: space-between;">
           <span style="font-weight: 600; color: ${b.type === "bullish" ? "var(--green)" : "var(--red)"};">
-            ${b.type.toUpperCase()} BoS at $${b.broken_level}
+            ${b.kind || 'BoS'} (${b.type.toUpperCase()}) at $${b.broken_level}
           </span>
           <span class="bos-tag ${validClass}">${b.valid ? "Valid (>=40%)" : "Invalid (<40%)"}</span>
         </div>
@@ -370,21 +624,6 @@ function renderSidebarData(analysis) {
       <span style="font-family: var(--font-mono); font-weight: 600;">$${l.price.toFixed(2)} ${l.swept ? '<span style="color: var(--green); font-size: 10px;">[SWEPT]</span>' : ""}</span>
     `;
     liquidityBody.appendChild(div);
-  });
-
-  // Support / Resistance
-  srBody.innerHTML = "";
-  (analysis.support_resistance || []).forEach((sr) => {
-    const div = document.createElement("div");
-    div.style.display = "flex";
-    div.style.justifyContent = "space-between";
-    div.style.padding = "4px 0";
-    div.style.fontSize = "11px";
-    div.innerHTML = `
-      <span>${sr.role.toUpperCase()} ($${sr.price})</span>
-      <span style="color: var(--text-dim);">${sr.touches} touches</span>
-    `;
-    srBody.appendChild(div);
   });
 }
 
@@ -416,7 +655,7 @@ function renderFvgList(container, fvgs, tf) {
   });
 }
 
-// 5. Update Status Panel
+// 6. Update Status Panel
 function updateStatusPanel(stat) {
   if (!stat) return;
 
@@ -460,7 +699,38 @@ function showWarning(msg) {
   warningText.textContent = msg;
 }
 
-// 6. Connect WebSocket for Real-Time Streaming
+// 7. Layer Toggle Listeners
+function setupToggleListeners() {
+  const mapping = [
+    { id: "togHtfFvg", key: "htfFvg" },
+    { id: "togLtfFvg", key: "ltfFvg" },
+    { id: "togOrderBlocks", key: "orderBlocks" },
+    { id: "togLiquidity", key: "liquidity" },
+    { id: "togTrendlines", key: "trendlines" },
+    { id: "togPsych", key: "psych" },
+    { id: "togSwings", key: "swings" },
+  ];
+
+  mapping.forEach(({ id, key }) => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.addEventListener("change", (e) => {
+        layerToggles[key] = e.target.checked;
+        if (currentAnalysis) {
+          clearOverlayLines();
+          drawSMCLevels(currentAnalysis);
+          if (layerToggles.swings) {
+            drawChartMarkers(currentAnalysis);
+          } else {
+            candleSeries.setMarkers([]);
+          }
+        }
+      });
+    }
+  });
+}
+
+// 8. Connect WebSocket for Real-Time Streaming
 function connectWebSocket() {
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
   const wsUrl = `${protocol}//${window.location.host}/ws`;
@@ -468,7 +738,6 @@ function connectWebSocket() {
   ws = new WebSocket(wsUrl);
 
   ws.onopen = () => {
-    console.log("Connected to dashboard WebSocket");
     ws.send(JSON.stringify({ action: "subscribe_timeframe", timeframe: currentTf }));
   };
 
@@ -496,6 +765,8 @@ function connectWebSocket() {
       } else if (data.event === "smc_sync") {
         updateStatusPanel(data.status);
         if (data.analysis) {
+          currentAnalysis = data.analysis;
+          renderMarketOverview(data.analysis);
           renderSidebarData(data.analysis);
         }
       }
@@ -505,7 +776,6 @@ function connectWebSocket() {
   };
 
   ws.onclose = () => {
-    console.warn("WebSocket closed. Reconnecting in 3s...");
     connStatusText.textContent = "Reconnecting";
     connectionPill.className = "conn-pill Reconnecting";
     setTimeout(connectWebSocket, 3000);
@@ -516,7 +786,7 @@ function connectWebSocket() {
   };
 }
 
-// 7. Event Listeners
+// 9. Event Listeners
 document.querySelectorAll(".tf-btn").forEach((btn) => {
   btn.addEventListener("click", () => {
     document.querySelectorAll(".tf-btn").forEach((b) => b.classList.remove("active"));
@@ -556,7 +826,7 @@ setInterval(() => {
   if (lastUpdateTs > 0) {
     const elapsed = Math.round(Date.now() / 1000 - lastUpdateTs);
     if (elapsed > 45) {
-      showWarning(`Data delayed (${elapsed}s since last update)`);
+      showWarning(`Data stream delayed (${elapsed}s since last update)`);
     }
   }
 }, 5000);

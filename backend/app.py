@@ -2,7 +2,7 @@ import asyncio
 import os
 import time
 from contextlib import asynccontextmanager
-from typing import Set
+from typing import Set, Optional
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from backend.config import DEFAULT_SYMBOL, DEFAULT_PRODUCT_ID, IST_TZ
 from backend.adapters.delta_exchange import DeltaExchangeAdapter
-from backend.smc.models import MarketDataStatus, Candle
+from backend.smc.models import MarketDataStatus, Candle, AnalysisConfig
 from backend.smc.engine import SMCEngine
 
 # Initialize adapter & engine
@@ -25,7 +25,6 @@ def broadcast_live_update(timeframe: str, candle: Candle):
     if not connected_clients:
         return
 
-    # Prepare lightweight payload for fast client update
     payload = {
         "event": "candle_update",
         "timeframe": timeframe,
@@ -33,7 +32,6 @@ def broadcast_live_update(timeframe: str, candle: Candle):
         "status": get_current_status(timeframe).model_dump()
     }
     
-    # Broadcast to all connected frontend clients
     asyncio.create_task(_send_to_all(payload))
 
 async def _send_to_all(message: dict):
@@ -64,7 +62,6 @@ def get_current_status(timeframe: str = "1H") -> MarketDataStatus:
 
     last_ts = last_candle.time if last_candle else 0
     last_ist = last_candle.ist_time if last_candle else ""
-
     candle_state = "Forming" if (last_candle and last_candle.is_forming) else "Confirmed"
 
     return MarketDataStatus(
@@ -133,7 +130,34 @@ async def get_candles(timeframe: str = Query("1H")):
     }
 
 @app.get("/api/smc")
-async def get_smc_analysis(timeframe: str = Query("1H")):
+async def get_smc_analysis(
+    timeframe: str = Query("1H"),
+    swing_window: int = Query(3),
+    fvg_min_size_mult: float = Query(0.1),
+    bos_min_retrace: float = Query(40.0)
+):
+    tf = timeframe.upper()
+    candles_by_tf = {
+        "1D": adapter.get_candles("1D"),
+        "4H": adapter.get_candles("4H"),
+        "1H": adapter.get_candles("1H"),
+        "30M": adapter.get_candles("30M"),
+    }
+    config = AnalysisConfig(
+        swing_window=swing_window,
+        fvg_min_size_atr_multiplier=fvg_min_size_mult,
+        bos_min_retracement_pct=bos_min_retrace
+    )
+    analysis = smc_engine.analyze_multi_timeframe(candles_by_tf, tf, config)
+    status = get_current_status(tf)
+    return {
+        "success": True,
+        "status": status.model_dump(),
+        "analysis": analysis
+    }
+
+@app.get("/api/market-state")
+async def get_market_state(timeframe: str = Query("1H")):
     tf = timeframe.upper()
     candles_by_tf = {
         "1D": adapter.get_candles("1D"),
@@ -142,11 +166,10 @@ async def get_smc_analysis(timeframe: str = Query("1H")):
         "30M": adapter.get_candles("30M"),
     }
     analysis = smc_engine.analyze_multi_timeframe(candles_by_tf, tf)
-    status = get_current_status(tf)
     return {
         "success": True,
-        "status": status.model_dump(),
-        "analysis": analysis
+        "market_state": analysis.get("market_state"),
+        "status": get_current_status(tf).model_dump()
     }
 
 @app.post("/api/refresh")
@@ -168,7 +191,6 @@ async def websocket_endpoint(websocket: WebSocket):
         })
         while True:
             data = await websocket.receive_text()
-            # Client can request specific timeframe change
             if data:
                 try:
                     import json

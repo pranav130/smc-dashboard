@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>SMC Key-Level Intelligence Dashboard | Delta Exchange India</title>
   <link rel="stylesheet" href="/static/styles.css">
-  <!-- Offline-ready TradingView Lightweight Charts -->
   <script src="/static/lightweight-charts.js"></script>
 </head>
 <body>
@@ -17,9 +16,9 @@
       <div>
         <div class="app-title">
           <span>XAUTUSD</span>
-          <span style="font-size: 11px; background: rgba(229,179,66,0.15); color: var(--accent-gold); padding: 1px 6px; border-radius: 4px; font-weight: 600;">Perpetual Future</span>
+          <span class="badge-contract">Perpetual Future</span>
         </div>
-        <div class="app-subtitle">SMC Key-Level Intelligence · Discretionary Analysis</div>
+        <div class="app-subtitle">SMC Key-Level Intelligence · Discretionary Analysis Support</div>
       </div>
     </div>
 
@@ -46,12 +45,40 @@
       </div>
       <button class="btn-refresh" id="btnRefresh" title="Fetch latest historical candles from Delta India">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
-        Sync
+        Sync Data
       </button>
     </div>
   </header>
 
-  <!-- Data Status Panel (Section 6) -->
+  <!-- Market Overview Bar (Descriptive State & Key Bias) -->
+  <div class="market-overview-bar">
+    <div class="overview-item">
+      <span class="overview-label">Daily Structure:</span>
+      <span class="overview-val" id="ovDailyTrend">--</span>
+    </div>
+    <div class="overview-item">
+      <span class="overview-label">4H Structure:</span>
+      <span class="overview-val" id="ovH4Trend">--</span>
+    </div>
+    <div class="overview-item">
+      <span class="overview-label">Dealing Range:</span>
+      <span class="overview-val" id="ovDealingRange">--</span>
+    </div>
+    <div class="overview-item">
+      <span class="overview-label">Nearest Overhead:</span>
+      <span class="overview-val overhead" id="ovNearestAbove">--</span>
+    </div>
+    <div class="overview-item">
+      <span class="overview-label">Nearest Support:</span>
+      <span class="overview-val support" id="ovNearestBelow">--</span>
+    </div>
+    <div class="overview-item">
+      <span class="overview-label">OTE Status:</span>
+      <span class="overview-val" id="ovOteStatus">Outside OTE</span>
+    </div>
+  </div>
+
+  <!-- Data Status & Basis Disclosure Panel -->
   <div class="data-status-panel">
     <div class="status-left">
       <div class="status-item">
@@ -67,8 +94,8 @@
         <span class="status-val" id="statProvider">Delta Exchange India</span>
       </div>
       <div class="status-item">
-        <span class="status-label">Timeframe:</span>
-        <span class="status-val" id="statTimeframe">1H</span>
+        <span class="status-label">Basis vs Spot:</span>
+        <span class="status-val" style="color: var(--text-dim);" title="Perpetual futures mark typically trades 0.06%-0.18% above TradingView spot gold.">+0.06% to +0.18% (Disclosed)</span>
       </div>
     </div>
 
@@ -92,10 +119,10 @@
     </div>
   </div>
 
-  <!-- Warning Banner for stale/delayed data -->
+  <!-- Warning Banner for stale/delayed data or opposing zones -->
   <div class="warning-banner" id="warningBanner" style="display: none;">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-    <span id="warningText">Market data stream is delayed or stale.</span>
+    <span id="warningText">Market data stream notice.</span>
   </div>
 
   <!-- Main Content Layout -->
@@ -103,16 +130,29 @@
     
     <!-- Chart Container -->
     <div class="chart-container">
+      <!-- Chart Controls & Overlays Toolbar -->
+      <div class="chart-controls-toolbar">
+        <div class="toolbar-title">Chart Overlays:</div>
+        <label class="toggle-label"><input type="checkbox" id="togHtfFvg" checked> HTF FVGs</label>
+        <label class="toggle-label"><input type="checkbox" id="togLtfFvg" checked> Current FVGs</label>
+        <label class="toggle-label"><input type="checkbox" id="togOrderBlocks" checked> Order Blocks</label>
+        <label class="toggle-label"><input type="checkbox" id="togLiquidity" checked> PDH/PDL/EQ</label>
+        <label class="toggle-label"><input type="checkbox" id="togTrendlines" checked> Trendlines</label>
+        <label class="toggle-label"><input type="checkbox" id="togPsych" checked> 20/80 Levels</label>
+        <label class="toggle-label"><input type="checkbox" id="togSwings" checked> Swings & BoS</label>
+      </div>
+
       <div class="chart-overlay-legend">
         <div class="legend-title" id="legendTitle">XAUTUSD · 1H · DELTA INDIA</div>
         <div class="legend-items">
           <div id="legendOHLC">O: -- H: -- L: -- C: -- V: --</div>
-          <div style="margin-top: 4px; display: flex; gap: 12px;">
+          <div style="margin-top: 4px; display: flex; flex-wrap: wrap; gap: 10px;">
             <div class="legend-item"><span class="legend-color" style="background: rgba(38,166,154,0.7);"></span> Bullish FVG</div>
             <div class="legend-item"><span class="legend-color" style="background: rgba(239,83,80,0.7);"></span> Bearish FVG</div>
-            <div class="legend-item"><span class="legend-color" style="background: #e5b342;"></span> 50% POI Midpoint</div>
+            <div class="legend-item"><span class="legend-color" style="background: #e5b342;"></span> 50% Equilibrium POI</div>
+            <div class="legend-item"><span class="legend-color" style="background: #ab47bc;"></span> Order Block</div>
             <div class="legend-item"><span class="legend-color" style="background: #29b6f6;"></span> PDH / PDL</div>
-            <div class="legend-item"><span class="legend-color" style="background: #ab47bc;"></span> 20 / 80 Levels</div>
+            <div class="legend-item"><span class="legend-color" style="background: #ff9800;"></span> 20 / 80 Round Levels</div>
           </div>
         </div>
       </div>
@@ -130,14 +170,14 @@
 
       <div class="sidebar-content">
 
-        <!-- Tab 1: Key Levels by Distance -->
+        <!-- Tab 1: Key Levels by Distance & Score -->
         <div class="tab-pane active" id="tab-levels">
           <!-- Opposing HTF Warnings -->
           <div id="opposingAlertsArea"></div>
 
           <div class="card">
             <div class="card-header">
-              <span class="card-title">Nearby SMC Levels to Current Price</span>
+              <span class="card-title">Prioritized SMC Key Levels</span>
               <span class="badge-count" id="levelsCount">0</span>
             </div>
             <div class="card-body" style="padding: 0;">
@@ -147,13 +187,24 @@
                     <th>Level / POI</th>
                     <th>Price</th>
                     <th>Dist ($)</th>
-                    <th>Status</th>
+                    <th>Score / Status</th>
                   </tr>
                 </thead>
                 <tbody id="levelsTableBody">
                   <tr><td colspan="4" style="text-align: center; color: var(--text-dim); padding: 16px;">Loading levels...</td></tr>
                 </tbody>
               </table>
+            </div>
+          </div>
+
+          <!-- Order Blocks Summary -->
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Active Order Blocks</span>
+              <span class="badge-count" id="obCount">0</span>
+            </div>
+            <div class="card-body" id="obBody">
+              <div style="color: var(--text-dim); font-size: 11px;">Scanning for confirmed order blocks...</div>
             </div>
           </div>
 
@@ -208,6 +259,26 @@
 
         <!-- Tab 3: Market Structure & Liquidity -->
         <div class="tab-pane" id="tab-structure" style="display: none;">
+          <!-- Premium / Discount Overview -->
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Dealing Range & Premium / Discount</span>
+            </div>
+            <div class="card-body" id="premDiscBody">
+              <div style="font-size: 11px; color: var(--text-dim);">Evaluating range...</div>
+            </div>
+          </div>
+
+          <!-- Trendlines -->
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Trendlines (1H / 30M)</span>
+              <span class="badge-count" id="tlCount">0</span>
+            </div>
+            <div class="card-body" id="trendlineBody"></div>
+          </div>
+
+          <!-- Liquidity Levels & Sweeps -->
           <div class="card">
             <div class="card-header">
               <span class="card-title">Liquidity Levels & Sweeps</span>
@@ -215,19 +286,13 @@
             <div class="card-body" id="liquidityBody"></div>
           </div>
 
+          <!-- Break of Structure & CHoCH -->
           <div class="card">
             <div class="card-header">
-              <span class="card-title">Break of Structure (BoS)</span>
+              <span class="card-title">Structure Breaks (BoS & CHoCH)</span>
               <span class="badge-count" id="bosCount">0</span>
             </div>
             <div class="card-body" id="bosBody"></div>
-          </div>
-
-          <div class="card">
-            <div class="card-header">
-              <span class="card-title">Major Support & Resistance</span>
-            </div>
-            <div class="card-body" id="srBody"></div>
           </div>
         </div>
 
@@ -249,6 +314,10 @@
             <strong>Psychological Numbers:</strong>
             <p>• Trades occurring at or near the 20s or 80s levels have increased probability when aligned with the overall setup.</p>
           </div>
+          <div class="poi-callout" style="border-left-color: var(--blue);">
+            <strong>Analysis Support Notice:</strong>
+            <p>This dashboard is a market-analysis decision-support tool. It computes verified market levels and descriptive market states. It does not issue automated buy/sell signals.</p>
+          </div>
         </div>
 
       </div>
@@ -256,7 +325,6 @@
 
   </div>
 
-  <!-- Application Logic -->
   <script src="/static/app.js"></script>
 </body>
 </html>

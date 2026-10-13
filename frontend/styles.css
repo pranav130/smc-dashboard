@@ -519,3 +519,116 @@ header {
   background: var(--border-light);
   border-radius: 3px;
 }
+
+/* Additional styling for SMC Intelligence Dashboard enhancements */
+
+.badge-contract {
+  font-size: 11px;
+  background: rgba(229,179,66,0.15);
+  color: var(--accent-gold);
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-weight: 600;
+}
+
+/* Market Overview Bar */
+.market-overview-bar {
+  background: #0f131a;
+  border-bottom: 1px solid var(--border);
+  padding: 6px 16px;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  font-size: 11px;
+  flex-shrink: 0;
+  overflow-x: auto;
+}
+
+.overview-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.overview-label {
+  color: var(--text-dim);
+  font-weight: 500;
+}
+
+.overview-val {
+  color: var(--text-main);
+  font-weight: 600;
+  font-family: var(--font-mono);
+}
+
+.overview-val.bullish {
+  color: var(--green);
+}
+
+.overview-val.bearish {
+  color: var(--red);
+}
+
+.overview-val.overhead {
+  color: #ffb74d;
+}
+
+.overview-val.support {
+  color: #4fc3f7;
+}
+
+/* Chart Controls Toolbar */
+.chart-controls-toolbar {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  z-index: 10;
+  background: rgba(21, 25, 34, 0.85);
+  backdrop-filter: blur(4px);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 10px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 11px;
+}
+
+.toolbar-title {
+  color: var(--text-dim);
+  font-weight: 600;
+}
+
+.toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  color: var(--text-muted);
+  user-select: none;
+}
+
+.toggle-label:hover {
+  color: var(--text-main);
+}
+
+.toggle-label input[type="checkbox"] {
+  accent-color: var(--accent-gold);
+  cursor: pointer;
+}
+
+/* Order Block Card styling */
+.type-ob {
+  background: rgba(171, 71, 188, 0.2);
+  color: #ce93d8;
+}
+
+.score-badge {
+  background: rgba(229, 179, 66, 0.15);
+  color: var(--accent-gold);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 600;
+}

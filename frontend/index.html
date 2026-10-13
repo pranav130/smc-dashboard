@@ -16,7 +16,7 @@
       <div>
         <div class="app-title">
           <span>XAUTUSD</span>
-          <span class="badge-contract">Perpetual Future</span>
+          <span class="badge-contract" id="headerBadge">Spot Index</span>
         </div>
         <div class="app-subtitle">SMC Key-Level Intelligence · Discretionary Analysis Support</div>
       </div>
@@ -86,11 +86,11 @@
     <div class="status-left">
       <div class="status-item">
         <span class="status-label">Instrument:</span>
-        <span class="status-val" id="statInstrument">Tether Gold (XAUTUSD #131253)</span>
+        <span class="status-val" id="statInstrument">Tether Gold Spot Index (.DEXAUTUSD)</span>
       </div>
       <div class="status-item">
         <span class="status-label">Contract:</span>
-        <span class="status-val" id="statContract">Perpetual Futures (0.001 XAUT/ct)</span>
+        <span class="status-val" id="statContract">Spot Price Index (1 oz Benchmark)</span>
       </div>
       <div class="status-item">
         <span class="status-label">Provider:</span>
@@ -102,7 +102,7 @@
       </div>
       <div class="status-item">
         <span class="status-label">Basis vs Spot:</span>
-        <span class="status-val" style="color: var(--text-dim);" title="Perpetual futures mark typically trades 0.06%-0.18% above TradingView spot gold.">+0.06% to +0.18% (Disclosed)</span>
+        <span class="status-val" id="statBasis" style="color: var(--text-dim);" title="Tracking Delta Exchange India spot gold index.">0.00% (Spot Index Reference)</span>
       </div>
     </div>
 

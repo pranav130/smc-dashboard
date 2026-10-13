@@ -11,6 +11,7 @@ from backend.config import (
     DELTA_REST_URL,
     DELTA_WS_URL,
     DELTA_LEGACY_WS_URL,
+    DEFAULT_SYMBOL,
     TIMEFRAME_MAP,
     REVERSE_TIMEFRAME_MAP,
     TIMEFRAME_SECONDS,
@@ -36,7 +37,7 @@ TIMEFRAME_LIMITS = {
 class DeltaExchangeAdapter(BaseMarketDataAdapter):
     """
     Dedicated Market Data Adapter for Delta Exchange India.
-    Connects to official REST API and WebSocket candle stream for XAUTUSD.
+    Connects to official REST API and WebSocket candle stream for XAUTUSD / .DEXAUTUSD.
     """
 
     def __init__(self, base_rest_url: str = DELTA_REST_URL, ws_url: str = DELTA_WS_URL):
@@ -91,11 +92,18 @@ class DeltaExchangeAdapter(BaseMarketDataAdapter):
             elif ts > 1e11:  # milliseconds
                 ts = ts // 1_000
 
-            o = float(raw.get("open") or raw.get("o", 0.0))
-            h = float(raw.get("high") or raw.get("h", 0.0))
-            l = float(raw.get("low") or raw.get("l", 0.0))
-            c = float(raw.get("close") or raw.get("c", 0.0))
-            v = float(raw.get("volume") or raw.get("v", 0.0))
+            raw_o = raw.get("open") if raw.get("open") is not None else raw.get("o")
+            raw_h = raw.get("high") if raw.get("high") is not None else raw.get("h")
+            raw_l = raw.get("low") if raw.get("low") is not None else raw.get("l")
+            raw_c = raw.get("close") if raw.get("close") is not None else raw.get("c")
+            raw_v = raw.get("volume") if raw.get("volume") is not None else raw.get("v")
+
+            o = float(raw_o) if raw_o is not None else 0.0
+            h = float(raw_h) if raw_h is not None else 0.0
+            l = float(raw_l) if raw_l is not None else 0.0
+            c = float(raw_c) if raw_c is not None else 0.0
+            # Index candles have no contract volume; safely default to 0.0
+            v = float(raw_v) if raw_v is not None else 0.0
 
             # Validation
             if h < l or h < o or h < c or l > o or l > c:
@@ -119,7 +127,7 @@ class DeltaExchangeAdapter(BaseMarketDataAdapter):
 
     async def fetch_historical_candles(
         self,
-        symbol: str = "XAUTUSD",
+        symbol: Optional[str] = None,
         timeframe: str = "1H",
         limit: Optional[int] = None
     ) -> List[Candle]:
@@ -128,6 +136,8 @@ class DeltaExchangeAdapter(BaseMarketDataAdapter):
         Handles pagination, deduplication, and ascending sorting.
         Guarantees at least 24 hours of historical data per timeframe.
         """
+        if symbol is None:
+            symbol = DEFAULT_SYMBOL
         tf_key = timeframe.upper()
         if limit is None:
             limit = TIMEFRAME_LIMITS.get(tf_key, 500)
@@ -194,8 +204,10 @@ class DeltaExchangeAdapter(BaseMarketDataAdapter):
         self.last_successful_update = int(time.time())
         return cleaned
 
-    async def initialize_all_timeframes(self, symbol: str = "XAUTUSD", limit: Optional[int] = None):
+    async def initialize_all_timeframes(self, symbol: Optional[str] = None, limit: Optional[int] = None):
         """Fetch historical candles for all supported timeframes ensuring at least 24 hours of data."""
+        if symbol is None:
+            symbol = DEFAULT_SYMBOL
         tasks = [
             self.fetch_historical_candles(symbol, tf, limit=TIMEFRAME_LIMITS.get(tf, 500) if limit is None else limit)
             for tf in ["1D", "4H", "1H", "30M", "15M", "5M", "1M"]
@@ -249,11 +261,13 @@ class DeltaExchangeAdapter(BaseMarketDataAdapter):
 
     async def start_streaming(
         self,
-        symbol: str = "XAUTUSD",
+        symbol: Optional[str] = None,
         timeframes: Optional[List[str]] = None,
         on_candle_update: Optional[Callable[[str, Candle], Any]] = None
     ):
         """Start the WebSocket market-data stream with auto-reconnection and polling fallback."""
+        if symbol is None:
+            symbol = DEFAULT_SYMBOL
         if timeframes is None:
             timeframes = ["1D", "4H", "1H", "30M", "15M", "5M", "1M"]
 
@@ -273,7 +287,11 @@ class DeltaExchangeAdapter(BaseMarketDataAdapter):
         for tf in timeframes:
             res = TIMEFRAME_MAP.get(tf.upper(), tf.lower())
             ws_channels.append({"name": f"candlestick_{res}", "symbols": [symbol]})
-        ws_channels.append({"name": "v2/ticker", "symbols": [symbol]})
+
+        ticker_syms = [symbol]
+        if symbol == ".DEXAUTUSD" and "XAUTUSD" not in ticker_syms:
+            ticker_syms.append("XAUTUSD")
+        ws_channels.append({"name": "v2/ticker", "symbols": ticker_syms})
 
         subscribe_payload = {
             "type": "subscribe",
@@ -320,9 +338,12 @@ class DeltaExchangeAdapter(BaseMarketDataAdapter):
                             res = data.get("res") or msg_type.replace("candlestick_", "")
                             tf = REVERSE_TIMEFRAME_MAP.get(res, res.upper())
                             self.update_forming_candle(tf, data)
-                        elif msg_type == "v2/ticker" or "mark_price" in data or "close" in data:
+                        elif msg_type == "v2/ticker" or "mark_price" in data or "spot_price" in data or "close" in data:
                             # Ticker update can be used to update the close of forming candles
-                            close_val = data.get("close") or data.get("mark_price")
+                            if symbol == ".DEXAUTUSD":
+                                close_val = data.get("spot_price") or data.get("close")
+                            else:
+                                close_val = data.get("close") or data.get("mark_price")
                             if close_val:
                                 for tf in ["30M", "1H", "4H", "1D"]:
                                     forming = self.forming_candles.get(tf)

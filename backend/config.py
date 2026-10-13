@@ -6,8 +6,15 @@ DELTA_REST_URL = os.getenv("DELTA_REST_URL", "https://api.india.delta.exchange")
 DELTA_WS_URL = os.getenv("DELTA_WS_URL", "wss://public-socket.india.delta.exchange")
 DELTA_LEGACY_WS_URL = os.getenv("DELTA_LEGACY_WS_URL", "wss://socket.india.delta.exchange")
 
-DEFAULT_SYMBOL = os.getenv("DELTA_SYMBOL", "XAUTUSD")
-DEFAULT_PRODUCT_ID = 131253
+# Price Source Configuration:
+# "index" = Delta Exchange Spot Index (.DEXAUTUSD) - Benchmark spot gold price (Exact spot gold tracking)
+# "mark"  = Delta Exchange Perpetual Futures (XAUTUSD) - Perpetual futures mark price
+PRICE_SOURCE = os.getenv("DELTA_PRICE_SOURCE", "index").lower()
+INDEX_SYMBOL = ".DEXAUTUSD"
+MARK_SYMBOL = "XAUTUSD"
+
+DEFAULT_SYMBOL = os.getenv("DELTA_SYMBOL", INDEX_SYMBOL if PRICE_SOURCE == "index" else MARK_SYMBOL)
+DEFAULT_PRODUCT_ID = 435 if DEFAULT_SYMBOL == INDEX_SYMBOL else 131253
 
 # Supported Timeframes
 TIMEFRAME_MAP = {

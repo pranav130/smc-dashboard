@@ -203,8 +203,8 @@ function initChart() {
 // 2. Fetch & Render SMC Data for Selected Timeframe
 async function loadSMCData(timeframe) {
   try {
-    currentTf = timeframe.toUpperCase();
-    if (legendTitle) legendTitle.textContent = `XAUTUSD · ${currentTf} · DELTA INDIA`;
+    const isIndexSym = (window.currentSymbol === ".DEXAUTUSD" || document.getElementById("headerBadge")?.textContent?.includes("Index"));
+    if (legendTitle) legendTitle.textContent = `${isIndexSym ? "XAUTUSD (INDEX)" : "XAUTUSD"} · ${currentTf} · DELTA INDIA`;
 
     const res = await fetch(`/api/smc?timeframe=${currentTf}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -1069,6 +1069,26 @@ function updateStatusPanel(stat) {
 
   if (connStatusText) connStatusText.textContent = stat.connection_status;
   if (connectionPill) connectionPill.className = `conn-pill ${stat.connection_status.replace(" ", "-")}`;
+
+  if (stat.symbol) window.currentSymbol = stat.symbol;
+  const statInst = document.getElementById("statInstrument");
+  const statCont = document.getElementById("statContract");
+  const statBasis = document.getElementById("statBasis");
+  const headerBadge = document.getElementById("headerBadge");
+
+  if (stat.symbol === ".DEXAUTUSD" || stat.contract_type === "spot_index") {
+    if (statInst) statInst.textContent = stat.instrument_name || "Tether Gold Spot Index (.DEXAUTUSD)";
+    if (statCont) statCont.textContent = "Spot Price Index (1 oz Benchmark)";
+    if (statBasis) statBasis.textContent = "0.00% (Spot Index Reference)";
+    if (headerBadge) headerBadge.textContent = "Spot Index";
+    if (legendTitle) legendTitle.textContent = `XAUTUSD (INDEX) · ${currentTf} · DELTA INDIA`;
+  } else {
+    if (statInst) statInst.textContent = stat.instrument_name || "Tether Gold (XAUTUSD #131253)";
+    if (statCont) statCont.textContent = "Perpetual Futures (0.001 XAUT/ct)";
+    if (statBasis) statBasis.textContent = "+0.06% to +0.18% (Disclosed)";
+    if (headerBadge) headerBadge.textContent = "Perpetual Future";
+    if (legendTitle) legendTitle.textContent = `XAUTUSD · ${currentTf} · DELTA INDIA`;
+  }
 
   if (statStreamMode) {
     if (stat.connection_status === "Polling Fallback") {

@@ -8,7 +8,14 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.config import DEFAULT_SYMBOL, DEFAULT_PRODUCT_ID, IST_TZ
+from backend.config import (
+    DEFAULT_SYMBOL,
+    DEFAULT_PRODUCT_ID,
+    INDEX_SYMBOL,
+    MARK_SYMBOL,
+    PRICE_SOURCE,
+    IST_TZ,
+)
 from backend.adapters.delta_exchange import DeltaExchangeAdapter
 from backend.smc.models import MarketDataStatus, Candle, AnalysisConfig
 from backend.smc.engine import SMCEngine
@@ -64,14 +71,19 @@ def get_current_status(timeframe: str = "1H") -> MarketDataStatus:
     last_ist = last_candle.ist_time if last_candle else ""
     candle_state = "Forming" if (last_candle and last_candle.is_forming) else "Confirmed"
 
+    is_index = (DEFAULT_SYMBOL == INDEX_SYMBOL)
+    inst_name = "Tether Gold Spot Index (.DEXAUTUSD)" if is_index else "Tether Gold Perpetual Future (XAUTUSD)"
+    contract_type = "spot_index" if is_index else "perpetual_futures"
+    contract_val = "Spot Gold Index (1 oz Benchmark)" if is_index else "0.001 XAUT"
+
     return MarketDataStatus(
-        instrument_name="Tether Gold Token Perpetual Future",
+        instrument_name=inst_name,
         symbol=DEFAULT_SYMBOL,
         product_id=DEFAULT_PRODUCT_ID,
-        contract_type="perpetual_futures",
+        contract_type=contract_type,
         quote_currency="USD",
         settling_currency="USD",
-        contract_value="0.001 XAUT",
+        contract_value=contract_val,
         tick_size=0.01,
         data_provider="Delta Exchange India",
         selected_timeframe=tf,
@@ -220,6 +232,19 @@ async def get_market_state(timeframe: str = Query("1H")):
         "success": True,
         "market_state": analysis.get("market_state"),
         "status": status.model_dump()
+    }
+
+@app.get("/api/config/price-source")
+async def get_price_source():
+    is_index = (DEFAULT_SYMBOL == INDEX_SYMBOL)
+    return {
+        "success": True,
+        "price_source": "index" if is_index else "mark",
+        "symbol": DEFAULT_SYMBOL,
+        "product_id": DEFAULT_PRODUCT_ID,
+        "index_symbol": INDEX_SYMBOL,
+        "mark_symbol": MARK_SYMBOL,
+        "description": "Delta Exchange India Spot Gold Index (.DEXAUTUSD)" if is_index else "Delta Exchange India Perpetual Futures Mark Price (XAUTUSD)"
     }
 
 @app.post("/api/refresh")

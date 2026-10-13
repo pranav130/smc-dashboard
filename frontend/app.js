@@ -142,7 +142,7 @@ function initChart() {
 async function loadSMCData(timeframe) {
   try {
     currentTf = timeframe.toUpperCase();
-    legendTitle.textContent = `XAUTUSD · ${currentTf} · DELTA INDIA`;
+    if (legendTitle) legendTitle.textContent = `XAUTUSD · ${currentTf} · DELTA INDIA`;
 
     const res = await fetch(`/api/smc?timeframe=${currentTf}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -150,10 +150,11 @@ async function loadSMCData(timeframe) {
 
     if (data.success) {
       currentAnalysis = data.analysis;
-      updateStatusPanel(data.status);
-      renderMarketOverview(data.analysis);
-      renderChartData(data.analysis);
-      renderSidebarData(data.analysis);
+      if (warningBanner) warningBanner.style.display = "none";
+      try { updateStatusPanel(data.status); } catch (e) { console.error("updateStatusPanel error:", e); }
+      try { renderMarketOverview(data.analysis); } catch (e) { console.error("renderMarketOverview error:", e); }
+      try { renderChartData(data.analysis); } catch (e) { console.error("renderChartData error:", e); }
+      try { renderSidebarData(data.analysis); } catch (e) { console.error("renderSidebarData error:", e); }
     }
   } catch (err) {
     console.error("Failed to load SMC data:", err);
@@ -659,38 +660,42 @@ function renderFvgList(container, fvgs, tf) {
 function updateStatusPanel(stat) {
   if (!stat) return;
 
-  statTimeframe.textContent = stat.selected_timeframe || currentTf;
-  statLastCandle.textContent = stat.last_candle_ist || "--";
+  if (statTimeframe) statTimeframe.textContent = stat.selected_timeframe || currentTf;
+  if (statLastCandle) statLastCandle.textContent = stat.last_candle_ist || "--";
 
-  if (stat.candle_state === "Forming") {
-    statCandleState.className = "forming-badge";
-    statCandleState.textContent = "Forming...";
-  } else {
-    statCandleState.className = "confirmed-badge";
-    statCandleState.textContent = "Confirmed";
+  if (statCandleState) {
+    if (stat.candle_state === "Forming") {
+      statCandleState.className = "forming-badge";
+      statCandleState.textContent = "Forming...";
+    } else {
+      statCandleState.className = "confirmed-badge";
+      statCandleState.textContent = "Confirmed";
+    }
   }
 
-  statLastUpdate.textContent = stat.last_update_ist || "--";
+  if (statLastUpdate) statLastUpdate.textContent = stat.last_update_ist || "--";
   lastUpdateTs = stat.last_update_timestamp || Date.now() / 1000;
 
-  connStatusText.textContent = stat.connection_status;
-  connectionPill.className = `conn-pill ${stat.connection_status.replace(" ", "-")}`;
+  if (connStatusText) connStatusText.textContent = stat.connection_status;
+  if (connectionPill) connectionPill.className = `conn-pill ${stat.connection_status.replace(" ", "-")}`;
 
-  if (stat.connection_status === "Polling Fallback") {
-    statStreamMode.textContent = "REST Polling";
-    statStreamMode.style.color = "var(--blue)";
-  } else if (stat.connection_status === "Connected") {
-    statStreamMode.textContent = "WebSocket Live";
-    statStreamMode.style.color = "var(--green)";
-  } else {
-    statStreamMode.textContent = stat.connection_status;
-    statStreamMode.style.color = "var(--accent-gold)";
+  if (statStreamMode) {
+    if (stat.connection_status === "Polling Fallback") {
+      statStreamMode.textContent = "REST Polling";
+      statStreamMode.style.color = "var(--blue)";
+    } else if (stat.connection_status === "Connected") {
+      statStreamMode.textContent = "WebSocket Live";
+      statStreamMode.style.color = "var(--green)";
+    } else {
+      statStreamMode.textContent = stat.connection_status;
+      statStreamMode.style.color = "var(--accent-gold)";
+    }
   }
 
   if (stat.warnings && stat.warnings.length) {
     showWarning(stat.warnings[0]);
   } else {
-    warningBanner.style.display = "none";
+    if (warningBanner) warningBanner.style.display = "none";
   }
 }
 

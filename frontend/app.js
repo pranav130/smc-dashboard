@@ -203,6 +203,9 @@ function initChart() {
 // 2. Fetch & Render SMC Data for Selected Timeframe
 async function loadSMCData(timeframe) {
   try {
+    if (timeframe) {
+      currentTf = timeframe.toUpperCase();
+    }
     const isIndexSym = (window.currentSymbol === ".DEXAUTUSD" || document.getElementById("headerBadge")?.textContent?.includes("Index"));
     if (legendTitle) legendTitle.textContent = `${isIndexSym ? "XAUTUSD (INDEX)" : "XAUTUSD"} · ${currentTf} · DELTA INDIA`;
 

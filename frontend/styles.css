@@ -1406,3 +1406,138 @@ body {
     padding: 0 10px;
   }
 }
+
+/* --------------------------------------------------------------------------
+   Liquidity Intelligence & Radar Styles (v1.1)
+   -------------------------------------------------------------------------- */
+.radar-box {
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  padding: 6px 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.radar-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+.radar-val {
+  font-size: 11.5px;
+  font-family: var(--font-mono, monospace);
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.liq-zone-item {
+  background: rgba(15, 23, 42, 0.75);
+  border: 1px solid var(--border-subtle);
+  border-radius: 5px;
+  padding: 8px 10px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  position: relative;
+}
+
+.liq-zone-item:hover {
+  background: rgba(30, 41, 59, 0.85);
+  border-color: rgba(168, 85, 247, 0.4);
+  transform: translateY(-1px);
+}
+
+.liq-zone-item.bsl-zone {
+  border-left: 3px solid #00b4af;
+}
+
+.liq-zone-item.ssl-zone {
+  border-left: 3px solid #f97316;
+}
+
+.liq-zone-item.swept-zone {
+  border-left: 3px solid #64748b;
+  opacity: 0.7;
+}
+
+.liq-zone-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.liq-zone-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-main);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.liq-score-pill {
+  font-size: 9.5px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-family: var(--font-mono, monospace);
+}
+
+.score-extreme {
+  background: rgba(168, 85, 247, 0.25);
+  color: #c084fc;
+  border: 1px solid rgba(168, 85, 247, 0.5);
+}
+
+.score-high {
+  background: rgba(0, 180, 175, 0.2);
+  color: #5eead4;
+  border: 1px solid rgba(0, 180, 175, 0.4);
+}
+
+.score-moderate {
+  background: rgba(245, 179, 56, 0.2);
+  color: #fcd34d;
+  border: 1px solid rgba(245, 179, 56, 0.4);
+}
+
+.score-low {
+  background: rgba(100, 116, 139, 0.2);
+  color: #94a3b8;
+  border: 1px solid rgba(100, 116, 139, 0.3);
+}
+
+.liq-zone-bounds {
+  font-size: 10.5px;
+  font-family: var(--font-mono, monospace);
+  color: var(--text-muted);
+  display: flex;
+  justify-content: space-between;
+}
+
+.liq-dist-tag {
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.liq-dist-tag.above {
+  color: #5eead4;
+}
+
+.liq-dist-tag.below {
+  color: #fdba74;
+}
+
+.liq-subfactor-row {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 4px;
+  padding-bottom: 2px;
+  border-bottom: 1px dashed rgba(148, 163, 184, 0.15);
+}
+

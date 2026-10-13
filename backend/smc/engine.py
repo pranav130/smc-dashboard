@@ -36,6 +36,7 @@ from backend.smc.trendlines import calculate_trendlines
 from backend.smc.psychological import calculate_psychological_levels
 from backend.smc.ranking import rank_key_levels
 from backend.smc.activation import generate_watchlist, global_alert_store
+from backend.smc.liquidity_intelligence import analyze_liquidity_intelligence
 
 
 class SMCEngine:
@@ -494,6 +495,13 @@ class SMCEngine:
             risk_reasons=risk_reasons
         )
 
+        # 12. Hidden Liquidity & Heatmap Intelligence
+        liquidity_intelligence = analyze_liquidity_intelligence(
+            candles_by_tf=candles_by_tf,
+            current_timeframe=tf,
+            config=config
+        )
+
         return {
             "timeframe": tf,
             "current_price": current_price,
@@ -524,5 +532,6 @@ class SMCEngine:
             "watchlist": [w.model_dump() for w in watchlist_entries],
             "active_alerts": [a.model_dump() for a in active_alerts],
             "state_counts": state_counts,
-            "opposing_warnings": opposing_warnings
+            "opposing_warnings": opposing_warnings,
+            "liquidity_intelligence": liquidity_intelligence.model_dump()
         }

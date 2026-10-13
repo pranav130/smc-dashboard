@@ -240,6 +240,27 @@ async def get_market_state(timeframe: str = Query("1H")):
         "status": status.model_dump()
     }
 
+@app.get("/api/liquidity-intelligence")
+async def get_liquidity_intelligence(timeframe: str = Query("1H")):
+    tf = timeframe.upper()
+    candles_by_tf = {
+        "1D": adapter.get_candles("1D"),
+        "4H": adapter.get_candles("4H"),
+        "1H": adapter.get_candles("1H"),
+        "30M": adapter.get_candles("30M"),
+        "15M": adapter.get_candles("15M"),
+        "5M": adapter.get_candles("5M"),
+        "1M": adapter.get_candles("1M"),
+    }
+    status = get_current_status(tf)
+    analysis = smc_engine.analyze_multi_timeframe(candles_by_tf, tf, is_stale=status.is_stale)
+    return {
+        "success": True,
+        "timeframe": tf,
+        "liquidity_intelligence": analysis.get("liquidity_intelligence"),
+        "status": status.model_dump()
+    }
+
 @app.get("/api/config/price-source")
 async def get_price_source():
     is_index = (DEFAULT_SYMBOL == INDEX_SYMBOL)

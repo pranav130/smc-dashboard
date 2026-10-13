@@ -28,11 +28,15 @@ const layerToggles = {
   ltfFvg: true,
   orderBlocks: true,
   liquidity: true,
+  hiddenLiquidity: true,
   trendlines: true,
   psych: true,
   swings: true,
   volume: true,
 };
+
+let currentLiqFilter = "all";
+let selectedLiqZoneId = null;
 
 // DOM Elements
 const headerPrice = document.getElementById("headerPrice");
@@ -819,6 +823,67 @@ function drawSMCLevels(analysis) {
       }
     });
   }
+
+  // -------------------------------------------------------------------------
+  // 7. Hidden Liquidity Intelligence Zones (BSL / SSL / Heatmap Overlay)
+  // -------------------------------------------------------------------------
+  if (layerToggles.hiddenLiquidity) {
+    const liqIntel = analysis.liquidity_intelligence;
+    const zones = liqIntel?.zones || [];
+
+    // Filter to active / approached / swept zones (exclude invalidated unless focused)
+    const renderZones = zones.filter((z) => z.status !== "INVALIDATED").slice(0, 8);
+
+    renderZones.forEach((z) => {
+      const isBsl = z.type.includes("BSL");
+      const isSwept = z.status === "SWEPT";
+      const isApproached = z.status === "APPROACHED";
+
+      // Color scheme: BSL teal/cyan, SSL orange, Swept subdued grey
+      let baseColor;
+      if (isSwept) {
+        baseColor = "rgba(100, 116, 139, 0.4)";
+      } else if (isBsl) {
+        baseColor = z.score >= 75 ? "#00b4af" : "#2dd4bf";
+      } else {
+        baseColor = z.score >= 75 ? "#f97316" : "#fb923c";
+      }
+
+      // If Focus Setup Mode is ON and this isn't the primary target, fade slightly
+      if (focusSetupMode) {
+        baseColor = isBsl ? "rgba(0, 180, 175, 0.3)" : "rgba(249, 115, 22, 0.3)";
+      }
+
+      // Draw Center / Anchor Line
+      addCollisionAwarePriceLine({
+        price: z.price,
+        color: baseColor,
+        lineWidth: z.score >= 75 ? 2 : 1,
+        lineStyle: isSwept ? LightweightCharts.LineStyle.Dotted : LightweightCharts.LineStyle.Solid,
+        axisLabelVisible: !focusSetupMode && z.score >= 60,
+        title: `💧 ${z.type} [${z.score}/100] ($${z.bottom.toFixed(2)} - $${z.top.toFixed(2)})`,
+      });
+
+      // Translucent boundary line
+      const boundColor = isBsl ? "rgba(0, 180, 175, 0.15)" : "rgba(249, 115, 22, 0.15)";
+      if (!focusSetupMode && z.score >= 65) {
+        addCollisionAwarePriceLine({
+          price: z.top,
+          color: boundColor,
+          lineWidth: 1,
+          lineStyle: LightweightCharts.LineStyle.SparseDotted,
+          axisLabelVisible: false,
+        });
+        addCollisionAwarePriceLine({
+          price: z.bottom,
+          color: boundColor,
+          lineWidth: 1,
+          lineStyle: LightweightCharts.LineStyle.SparseDotted,
+          axisLabelVisible: false,
+        });
+      }
+    });
+  }
 }
 
 function drawChartMarkers(analysis) {
@@ -1233,6 +1298,150 @@ function renderDrawerData(analysis) {
       });
     }
   }
+
+  // Hidden Liquidity Intelligence & Heatmap Radar
+  renderLiquidityIntelligence(analysis);
+}
+
+function renderLiquidityIntelligence(analysis) {
+  const liqIntel = analysis.liquidity_intelligence;
+  if (!liqIntel) return;
+
+  const radar = liqIntel.radar;
+  const zones = liqIntel.zones || [];
+
+  // 1. Radar Overview
+  const radarCount = document.getElementById("liqRadarZoneCount");
+  if (radarCount) radarCount.textContent = `${zones.length} Zones`;
+
+  const targetAboveVal = document.getElementById("radarTargetAboveVal");
+  if (targetAboveVal) {
+    if (radar?.nearest_target_above) {
+      const z = radar.nearest_target_above;
+      targetAboveVal.innerHTML = `<span style="color: #00b4af;">$${z.price.toFixed(2)}</span> (+${z.distance.toFixed(2)}) <span class="liq-score-pill score-high">${z.score}/100</span>`;
+    } else {
+      targetAboveVal.textContent = "None within range";
+    }
+  }
+
+  const targetBelowVal = document.getElementById("radarTargetBelowVal");
+  if (targetBelowVal) {
+    if (radar?.nearest_target_below) {
+      const z = radar.nearest_target_below;
+      targetBelowVal.innerHTML = `<span style="color: #f97316;">$${z.price.toFixed(2)}</span> (${z.distance.toFixed(2)}) <span class="liq-score-pill score-high">${z.score}/100</span>`;
+    } else {
+      targetBelowVal.textContent = "None within range";
+    }
+  }
+
+  // 2. Render Filtered Zones
+  const container = document.getElementById("liquidityZonesContainer");
+  if (!container) return;
+
+  let filtered = zones;
+  if (currentLiqFilter === "bsl") {
+    filtered = zones.filter((z) => z.type.includes("BSL"));
+  } else if (currentLiqFilter === "ssl") {
+    filtered = zones.filter((z) => z.type.includes("SSL"));
+  } else if (currentLiqFilter === "swept") {
+    filtered = zones.filter((z) => z.status === "SWEPT" || z.sweep?.confirmed_sweep);
+  }
+
+  container.innerHTML = "";
+  if (!filtered.length) {
+    container.innerHTML = `<div class="empty-state">No liquidity zones matching "${currentLiqFilter}" filter.</div>`;
+    return;
+  }
+
+  filtered.forEach((zone) => {
+    const isBsl = zone.type.includes("BSL");
+    const isSwept = zone.status === "SWEPT";
+    const zoneClass = isSwept ? "swept-zone" : isBsl ? "bsl-zone" : "ssl-zone";
+
+    let scoreClass = "score-low";
+    if (zone.score >= 80) scoreClass = "score-extreme";
+    else if (zone.score >= 65) scoreClass = "score-high";
+    else if (zone.score >= 45) scoreClass = "score-moderate";
+
+    const item = document.createElement("div");
+    item.className = `liq-zone-item ${zoneClass}`;
+    item.setAttribute("data-zone-id", zone.id);
+
+    const distSign = zone.distance >= 0 ? `+${zone.distance.toFixed(2)}` : zone.distance.toFixed(2);
+    const distClass = zone.distance >= 0 ? "above" : "below";
+
+    item.innerHTML = `
+      <div class="liq-zone-header">
+        <div class="liq-zone-title">
+          <span>${zone.label}</span>
+          <span style="font-size: 9px; padding: 1px 4px; border-radius: 2px; background: rgba(255,255,255,0.06); color: var(--text-dim);">${zone.timeframe}</span>
+        </div>
+        <span class="liq-score-pill ${scoreClass}">${zone.score}/100</span>
+      </div>
+      <div class="liq-zone-bounds">
+        <span>$${zone.bottom.toFixed(2)} - $${zone.top.toFixed(2)} (Center: $${zone.price.toFixed(2)})</span>
+        <span class="liq-dist-tag ${distClass}">${distSign} USD</span>
+      </div>
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 4px; font-size: 9.5px; color: var(--text-dim);">
+        <span>Status: <strong style="color: ${isSwept ? 'var(--gold)' : 'var(--teal-bull)'};">${zone.status}</strong> (${zone.touch_count} touches)</span>
+        <span style="color: #a855f7;">${zone.confluence_count} TF Confluence</span>
+      </div>
+    `;
+
+    item.addEventListener("click", () => {
+      showLiqZoneDetail(zone);
+    });
+
+    container.appendChild(item);
+  });
+}
+
+function showLiqZoneDetail(zone) {
+  const card = document.getElementById("liqZoneDetailsCard");
+  const title = document.getElementById("liqDetailTitle");
+  const body = document.getElementById("liqDetailBody");
+  if (!card || !title || !body) return;
+
+  title.textContent = `Evidence: ${zone.label}`;
+
+  let factorsHtml = "";
+  if (zone.score_breakdown?.factors) {
+    factorsHtml = zone.score_breakdown.factors.map((f) => `
+      <div class="liq-subfactor-row">
+        <span><strong>${f.name}</strong> (${f.description})</span>
+        <span style="font-family: var(--font-mono); color: var(--gold);">${f.points}/${f.max_points}</span>
+      </div>
+    `).join("");
+  }
+
+  let sweepHtml = "";
+  if (zone.sweep?.breached) {
+    sweepHtml = `
+      <div style="margin-top: 6px; padding: 6px; background: rgba(245, 179, 56, 0.1); border-left: 2px solid var(--gold); border-radius: 3px;">
+        <strong>Sweep Event:</strong> Pierced to $${zone.sweep.breach_price} (Max Excursion: +$${zone.sweep.max_excursion}). 
+        ${zone.sweep.confirmed_sweep ? 'Closed back inside (rejection confirmed).' : 'Sustained breakout.'}
+      </div>
+    `;
+  }
+
+  body.innerHTML = `
+    <div style="margin-bottom: 8px;">
+      <div><strong>Estimated Pool:</strong> $${zone.bottom.toFixed(2)} - $${zone.top.toFixed(2)} (Center: $${zone.price.toFixed(2)})</div>
+      <div><strong>Supporting Timeframes:</strong> ${zone.supporting_timeframes.join(", ")}</div>
+      <div><strong>Confidence:</strong> <span style="color: #c084fc;">${zone.confidence}</span> (${zone.score}/100)</div>
+    </div>
+    <div style="margin-bottom: 8px;">
+      <div style="font-weight: 600; color: var(--text-main); margin-bottom: 4px;">Score Breakdown:</div>
+      ${factorsHtml}
+    </div>
+    <div>
+      <div style="font-weight: 600; color: var(--text-main);">Invalidation Rule:</div>
+      <div style="color: var(--text-muted);">${zone.invalidation_criteria}</div>
+    </div>
+    ${sweepHtml}
+  `;
+
+  card.style.display = "block";
 }
 
 function renderFvgList(container, fvgs, tf) {
@@ -1302,6 +1511,7 @@ function setupDrawerNavigation() {
     "pane-fvg": "Fair Value Gaps & Overlaps",
     "pane-structure": "Market Structure & Swings",
     "pane-strategy": "Strategy Playbook & Rules",
+    "pane-liquidity": "Hidden Liquidity & Radar",
   };
 
   function openPane(paneId) {
@@ -1383,6 +1593,7 @@ function setupToggleListeners() {
     togLtfFvg: "ltfFvg",
     togOrderBlocks: "orderBlocks",
     togLiquidity: "liquidity",
+    togHiddenLiquidity: "hiddenLiquidity",
     togTrendlines: "trendlines",
     togPsych: "psych",
     togSwings: "swings",
@@ -1610,14 +1821,33 @@ function setupFocusSetupControls() {
 // 15. Event Listeners & Watchlist Filter Setup
 // --------------------------------------------------------------------------
 function setupWatchlistFilters() {
-  document.querySelectorAll(".filter-btn").forEach((btn) => {
+  document.querySelectorAll("#pane-setups .filter-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
-      document.querySelectorAll(".filter-btn").forEach((b) => b.classList.remove("active"));
+      document.querySelectorAll("#pane-setups .filter-btn").forEach((b) => b.classList.remove("active"));
       btn.classList.add("active");
       watchlistFilter = btn.getAttribute("data-filter");
       if (currentAnalysis) renderWatchlist(currentAnalysis);
     });
   });
+
+  // Liquidity tab filters
+  document.querySelectorAll("[data-liq-filter]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll("[data-liq-filter]").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      currentLiqFilter = btn.getAttribute("data-liq-filter");
+      if (currentAnalysis) renderLiquidityIntelligence(currentAnalysis);
+    });
+  });
+
+  // Close liquidity detail card
+  const btnClose = document.getElementById("btnCloseLiqDetail");
+  if (btnClose) {
+    btnClose.addEventListener("click", () => {
+      const card = document.getElementById("liqZoneDetailsCard");
+      if (card) card.style.display = "none";
+    });
+  }
 }
 
 function setupEventListeners() {

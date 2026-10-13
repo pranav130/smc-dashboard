@@ -175,6 +175,9 @@
               <label class="toggle-pill" title="Previous Day/Week High & Low + Equal Highs/Lows">
                 <input type="checkbox" id="togLiquidity" checked> <span class="dot liq"></span> PDH/PDL/EQ
               </label>
+              <label class="toggle-pill highlight-pill" title="Hidden Liquidity Intelligence (BSL / SSL Zones & Multi-TF Pools)">
+                <input type="checkbox" id="togHiddenLiquidity" checked> <span class="dot" style="background: #a855f7;"></span> Hidden Liquidity
+              </label>
               <label class="toggle-pill" title="Multi-touch Validated Trendlines">
                 <input type="checkbox" id="togTrendlines" checked> <span class="dot tl"></span> Trendlines
               </label>
@@ -403,6 +406,54 @@
             <p>This dashboard is a market-analysis decision-support terminal. It computes verified market levels and descriptive market states. It does not issue automated buy/sell signals.</p>
           </div>
         </div>
+
+        <!-- Pane: Hidden Liquidity Intelligence & Heatmap Radar -->
+        <div class="drawer-pane" id="pane-liquidity" style="display: none;">
+          <div class="drawer-card" style="margin-bottom: 12px;">
+            <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+              <span class="card-title">Liquidity Radar</span>
+              <span class="badge-count" id="liqRadarZoneCount">0 Zones</span>
+            </div>
+            <div class="card-body" style="padding: 10px;">
+              <div id="liqRadarOverview" style="display: flex; flex-direction: column; gap: 8px;">
+                <div class="radar-box" id="radarTargetAbove">
+                  <div class="radar-label">Target Above (BSL)</div>
+                  <div class="radar-val" id="radarTargetAboveVal">Scanning...</div>
+                </div>
+                <div class="radar-box" id="radarTargetBelow">
+                  <div class="radar-label">Target Below (SSL)</div>
+                  <div class="radar-val" id="radarTargetBelowVal">Scanning...</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Filter Pills -->
+          <div class="watchlist-filters" style="margin-bottom: 10px;">
+            <button class="filter-btn active" data-liq-filter="all">All</button>
+            <button class="filter-btn" data-liq-filter="bsl">BSL (Buy-Side)</button>
+            <button class="filter-btn" data-liq-filter="ssl">SSL (Sell-Side)</button>
+            <button class="filter-btn" data-liq-filter="swept">Sweeps</button>
+          </div>
+
+          <!-- Zones List Container -->
+          <div id="liquidityZonesContainer" style="display: flex; flex-direction: column; gap: 8px;">
+            <div class="empty-state">Scanning market structure for hidden liquidity zones...</div>
+          </div>
+
+          <!-- Zone Evidence Modal / Drawer Details Popover -->
+          <div id="liqZoneDetailsCard" class="drawer-card" style="margin-top: 14px; display: none; border-color: #a855f7;">
+            <div class="card-header" style="background: rgba(168, 85, 247, 0.1);">
+              <span class="card-title" id="liqDetailTitle">Zone Details</span>
+              <button class="btn-tool" id="btnCloseLiqDetail" style="padding: 2px 6px;">✕</button>
+            </div>
+            <div class="card-body" id="liqDetailBody" style="padding: 10px; font-size: 11px; line-height: 1.5;"></div>
+          </div>
+
+          <div style="margin-top: 14px; padding: 8px; border-radius: 4px; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(148, 163, 184, 0.1); font-size: 10px; color: var(--text-dim);">
+            <strong style="color: var(--text-muted);">Data Transparency:</strong> All pools are mathematically estimated via swing structure, equal highs/lows, and ATR clustering. No fake order-book or broker stop data is fabricated.
+          </div>
+        </div>
       </div>
     </aside>
 
@@ -430,6 +481,9 @@
       </button>
       <button class="rail-btn" data-pane="pane-strategy" title="Strategy Playbook & Rules">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      </button>
+      <button class="rail-btn" data-pane="pane-liquidity" title="Hidden Liquidity & Heatmap Radar" style="color: #c084fc;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="2"/></svg>
       </button>
     </nav>
 

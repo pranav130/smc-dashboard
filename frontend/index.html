@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SMC Key-Level Intelligence Dashboard | Delta Exchange India</title>
+  <link rel="stylesheet" href="/static/styles.css">
+  <!-- Offline-ready TradingView Lightweight Charts -->
+  <script src="/static/lightweight-charts.js"></script>
+</head>
+<body>
+
+  <!-- Header -->
+  <header>
+    <div class="logo-area">
+      <span class="logo-badge">DELTA INDIA</span>
+      <div>
+        <div class="app-title">
+          <span>XAUTUSD</span>
+          <span style="font-size: 11px; background: rgba(229,179,66,0.15); color: var(--accent-gold); padding: 1px 6px; border-radius: 4px; font-weight: 600;">Perpetual Future</span>
+        </div>
+        <div class="app-subtitle">SMC Key-Level Intelligence · Discretionary Analysis</div>
+      </div>
+    </div>
+
+    <div class="header-center">
+      <!-- Timeframe Selector -->
+      <div class="timeframe-group">
+        <button class="tf-btn" data-tf="1D">1D</button>
+        <button class="tf-btn" data-tf="4H">4H</button>
+        <button class="tf-btn active" data-tf="1H">1H</button>
+        <button class="tf-btn" data-tf="30M">30M</button>
+      </div>
+
+      <!-- Current Price Display -->
+      <div class="price-display">
+        <span class="current-price" id="headerPrice">--.--</span>
+        <span class="price-unit">USD</span>
+      </div>
+    </div>
+
+    <div class="header-actions">
+      <div id="connectionPill" class="conn-pill Connected">
+        <span class="pulse-dot"></span>
+        <span id="connStatusText">Connected</span>
+      </div>
+      <button class="btn-refresh" id="btnRefresh" title="Fetch latest historical candles from Delta India">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+        Sync
+      </button>
+    </div>
+  </header>
+
+  <!-- Data Status Panel (Section 6) -->
+  <div class="data-status-panel">
+    <div class="status-left">
+      <div class="status-item">
+        <span class="status-label">Instrument:</span>
+        <span class="status-val" id="statInstrument">Tether Gold (XAUTUSD #131253)</span>
+      </div>
+      <div class="status-item">
+        <span class="status-label">Contract:</span>
+        <span class="status-val" id="statContract">Perpetual Futures (0.001 XAUT/ct)</span>
+      </div>
+      <div class="status-item">
+        <span class="status-label">Provider:</span>
+        <span class="status-val" id="statProvider">Delta Exchange India</span>
+      </div>
+      <div class="status-item">
+        <span class="status-label">Timeframe:</span>
+        <span class="status-val" id="statTimeframe">1H</span>
+      </div>
+    </div>
+
+    <div class="status-right">
+      <div class="status-item">
+        <span class="status-label">Last Candle (IST):</span>
+        <span class="status-val" id="statLastCandle">--</span>
+      </div>
+      <div class="status-item">
+        <span class="status-label">Candle State:</span>
+        <span id="statCandleState" class="confirmed-badge">Confirmed</span>
+      </div>
+      <div class="status-item">
+        <span class="status-label">Last Update:</span>
+        <span class="status-val" id="statLastUpdate">--</span>
+      </div>
+      <div class="status-item">
+        <span class="status-label">Stream Mode:</span>
+        <span class="status-val" id="statStreamMode" style="color: var(--blue);">WebSocket Live</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Warning Banner for stale/delayed data -->
+  <div class="warning-banner" id="warningBanner" style="display: none;">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+    <span id="warningText">Market data stream is delayed or stale.</span>
+  </div>
+
+  <!-- Main Content Layout -->
+  <div class="main-content">
+    
+    <!-- Chart Container -->
+    <div class="chart-container">
+      <div class="chart-overlay-legend">
+        <div class="legend-title" id="legendTitle">XAUTUSD · 1H · DELTA INDIA</div>
+        <div class="legend-items">
+          <div id="legendOHLC">O: -- H: -- L: -- C: -- V: --</div>
+          <div style="margin-top: 4px; display: flex; gap: 12px;">
+            <div class="legend-item"><span class="legend-color" style="background: rgba(38,166,154,0.7);"></span> Bullish FVG</div>
+            <div class="legend-item"><span class="legend-color" style="background: rgba(239,83,80,0.7);"></span> Bearish FVG</div>
+            <div class="legend-item"><span class="legend-color" style="background: #e5b342;"></span> 50% POI Midpoint</div>
+            <div class="legend-item"><span class="legend-color" style="background: #29b6f6;"></span> PDH / PDL</div>
+            <div class="legend-item"><span class="legend-color" style="background: #ab47bc;"></span> 20 / 80 Levels</div>
+          </div>
+        </div>
+      </div>
+      <div id="chart"></div>
+    </div>
+
+    <!-- SMC Intelligence Sidebar -->
+    <div class="sidebar">
+      <div class="sidebar-tabs">
+        <button class="tab-btn active" data-tab="tab-levels">Key Levels</button>
+        <button class="tab-btn" data-tab="tab-fvg">FVGs & POI</button>
+        <button class="tab-btn" data-tab="tab-structure">Structure</button>
+        <button class="tab-btn" data-tab="tab-strategy">Strategy</button>
+      </div>
+
+      <div class="sidebar-content">
+
+        <!-- Tab 1: Key Levels by Distance -->
+        <div class="tab-pane active" id="tab-levels">
+          <!-- Opposing HTF Warnings -->
+          <div id="opposingAlertsArea"></div>
+
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Nearby SMC Levels to Current Price</span>
+              <span class="badge-count" id="levelsCount">0</span>
+            </div>
+            <div class="card-body" style="padding: 0;">
+              <table class="levels-table">
+                <thead>
+                  <tr>
+                    <th>Level / POI</th>
+                    <th>Price</th>
+                    <th>Dist ($)</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody id="levelsTableBody">
+                  <tr><td colspan="4" style="text-align: center; color: var(--text-dim); padding: 16px;">Loading levels...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Psychological 20s & 80s Levels -->
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Psychological Round Numbers (20s & 80s)</span>
+            </div>
+            <div class="card-body" style="padding: 0;">
+              <table class="levels-table">
+                <thead>
+                  <tr>
+                    <th>Level</th>
+                    <th>Price</th>
+                    <th>Distance</th>
+                  </tr>
+                </thead>
+                <tbody id="psychTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab 2: Fair Value Gaps & Critical Sections -->
+        <div class="tab-pane" id="tab-fvg" style="display: none;">
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Overlapping HTF Critical Sections (POI)</span>
+              <span class="badge-count" id="overlapsCount">0</span>
+            </div>
+            <div class="card-body" id="overlapsBody">
+              <div style="color: var(--text-dim); font-size: 11px;">Scanning for overlapping Daily & 4H FVGs...</div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Daily (1D) Fair Value Gaps</span>
+              <span class="badge-count" id="dailyFvgCount">0</span>
+            </div>
+            <div class="card-body" id="dailyFvgBody"></div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">4-Hour (4H) Fair Value Gaps</span>
+              <span class="badge-count" id="h4FvgCount">0</span>
+            </div>
+            <div class="card-body" id="h4FvgBody"></div>
+          </div>
+        </div>
+
+        <!-- Tab 3: Market Structure & Liquidity -->
+        <div class="tab-pane" id="tab-structure" style="display: none;">
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Liquidity Levels & Sweeps</span>
+            </div>
+            <div class="card-body" id="liquidityBody"></div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Break of Structure (BoS)</span>
+              <span class="badge-count" id="bosCount">0</span>
+            </div>
+            <div class="card-body" id="bosBody"></div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Major Support & Resistance</span>
+            </div>
+            <div class="card-body" id="srBody"></div>
+          </div>
+        </div>
+
+        <!-- Tab 4: Strategy Rules from User's Playbook -->
+        <div class="tab-pane" id="tab-strategy" style="display: none;">
+          <div class="poi-callout">
+            <strong>Critical Section (CS) / POI:</strong>
+            <p>• 50% or deeper area of an HTF FVG (Equilibrium midpoint).<br>• Overlapping HTF FVGs.<br>• Previous Day High/Low Liquidity Sweep.</p>
+          </div>
+          <div class="poi-callout">
+            <strong>Core Entry Sequences:</strong>
+            <p>1. LS + BoS + FVG formation + Signal<br>2. LR + FVG formation + Signal<br>3. HTF FVG + Liquidity created + LS + Signal</p>
+          </div>
+          <div class="poi-callout">
+            <strong>Structure Rules:</strong>
+            <p>• BoS is valid <strong>ONLY when there is at least 40% retracement</strong>.<br>• Confirm BoS on <strong>30-minute timeframe or higher</strong>.<br>• Avoid trades when an opposing HTF FVG is present.<br>• Trail Stop Loss using 30min FVGs.</p>
+          </div>
+          <div class="poi-callout">
+            <strong>Psychological Numbers:</strong>
+            <p>• Trades occurring at or near the 20s or 80s levels have increased probability when aligned with the overall setup.</p>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Application Logic -->
+  <script src="/static/app.js"></script>
+</body>
+</html>

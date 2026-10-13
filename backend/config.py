@@ -14,7 +14,10 @@ TIMEFRAME_MAP = {
     "1D": "1d",
     "4H": "4h",
     "1H": "1h",
-    "30M": "30m"
+    "30M": "30m",
+    "15M": "15m",
+    "5M": "5m",
+    "1M": "1m",
 }
 
 REVERSE_TIMEFRAME_MAP = {v: k for k, v in TIMEFRAME_MAP.items()}
@@ -23,7 +26,10 @@ TIMEFRAME_SECONDS = {
     "1d": 86400,
     "4h": 14400,
     "1h": 3600,
-    "30m": 1800
+    "30m": 1800,
+    "15m": 900,
+    "5m": 300,
+    "1m": 60,
 }
 
 # IST Timezone (UTC + 05:30)

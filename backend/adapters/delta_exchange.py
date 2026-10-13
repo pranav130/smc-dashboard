@@ -44,14 +44,20 @@ class DeltaExchangeAdapter(BaseMarketDataAdapter):
             "1D": [],
             "4H": [],
             "1H": [],
-            "30M": []
+            "30M": [],
+            "15M": [],
+            "5M": [],
+            "1M": [],
         }
         # Currently forming candle per timeframe
         self.forming_candles: Dict[str, Optional[Candle]] = {
             "1D": None,
             "4H": None,
             "1H": None,
-            "30M": None
+            "30M": None,
+            "15M": None,
+            "5M": None,
+            "1M": None,
         }
 
         self.on_update_callbacks: List[Callable[[str, Candle], Any]] = []
@@ -173,17 +179,20 @@ class DeltaExchangeAdapter(BaseMarketDataAdapter):
         return cleaned
 
     async def initialize_all_timeframes(self, symbol: str = "XAUTUSD", limit: int = 500):
-        """Fetch historical candles for all four required timeframes."""
+        """Fetch historical candles for all supported timeframes."""
         tasks = [
             self.fetch_historical_candles(symbol, tf, limit)
-            for tf in ["1D", "4H", "1H", "30M"]
+            for tf in ["1D", "4H", "1H", "30M", "15M", "5M", "1M"]
         ]
         await asyncio.gather(*tasks)
         logger.info(f"Initialized all timeframes for {symbol}: "
                     f"1D: {len(self.candles['1D'])}, "
                     f"4H: {len(self.candles['4H'])}, "
                     f"1H: {len(self.candles['1H'])}, "
-                    f"30M: {len(self.candles['30M'])}")
+                    f"30M: {len(self.candles['30M'])}, "
+                    f"15M: {len(self.candles['15M'])}, "
+                    f"5M: {len(self.candles['5M'])}, "
+                    f"1M: {len(self.candles['1M'])}")
 
     def update_forming_candle(self, timeframe: str, raw_candle: dict):
         """
@@ -230,7 +239,7 @@ class DeltaExchangeAdapter(BaseMarketDataAdapter):
     ):
         """Start the WebSocket market-data stream with auto-reconnection and polling fallback."""
         if timeframes is None:
-            timeframes = ["1D", "4H", "1H", "30M"]
+            timeframes = ["1D", "4H", "1H", "30M", "15M", "5M", "1M"]
 
         if on_candle_update:
             self.on_update_callbacks.append(on_candle_update)

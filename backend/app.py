@@ -91,10 +91,10 @@ async def lifespan(app: FastAPI):
     # Startup: fetch historical candles across all 4 timeframes
     print(f"Starting SMC Dashboard backend for {DEFAULT_SYMBOL}...")
     await adapter.initialize_all_timeframes(DEFAULT_SYMBOL, limit=300)
-    # Start live WebSocket stream
+    # Start live WebSocket stream across all timeframes
     await adapter.start_streaming(
         symbol=DEFAULT_SYMBOL,
-        timeframes=["1D", "4H", "1H", "30M"],
+        timeframes=["1D", "4H", "1H", "30M", "15M", "5M", "1M"],
         on_candle_update=broadcast_live_update
     )
     yield
@@ -142,6 +142,9 @@ async def get_smc_analysis(
         "4H": adapter.get_candles("4H"),
         "1H": adapter.get_candles("1H"),
         "30M": adapter.get_candles("30M"),
+        "15M": adapter.get_candles("15M"),
+        "5M": adapter.get_candles("5M"),
+        "1M": adapter.get_candles("1M"),
     }
     config = AnalysisConfig(
         swing_window=swing_window,
@@ -164,6 +167,9 @@ async def get_watchlist(timeframe: str = Query("1H")):
         "4H": adapter.get_candles("4H"),
         "1H": adapter.get_candles("1H"),
         "30M": adapter.get_candles("30M"),
+        "15M": adapter.get_candles("15M"),
+        "5M": adapter.get_candles("5M"),
+        "1M": adapter.get_candles("1M"),
     }
     status = get_current_status(tf)
     analysis = smc_engine.analyze_multi_timeframe(candles_by_tf, tf, is_stale=status.is_stale)
@@ -204,6 +210,9 @@ async def get_market_state(timeframe: str = Query("1H")):
         "4H": adapter.get_candles("4H"),
         "1H": adapter.get_candles("1H"),
         "30M": adapter.get_candles("30M"),
+        "15M": adapter.get_candles("15M"),
+        "5M": adapter.get_candles("5M"),
+        "1M": adapter.get_candles("1M"),
     }
     status = get_current_status(tf)
     analysis = smc_engine.analyze_multi_timeframe(candles_by_tf, tf, is_stale=status.is_stale)
@@ -244,6 +253,9 @@ async def websocket_endpoint(websocket: WebSocket):
                             "4H": adapter.get_candles("4H"),
                             "1H": adapter.get_candles("1H"),
                             "30M": adapter.get_candles("30M"),
+                            "15M": adapter.get_candles("15M"),
+                            "5M": adapter.get_candles("5M"),
+                            "1M": adapter.get_candles("1M"),
                         }
                         analysis = smc_engine.analyze_multi_timeframe(candles_by_tf, tf)
                         await websocket.send_json({

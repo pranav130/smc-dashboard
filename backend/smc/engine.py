@@ -116,9 +116,9 @@ class SMCEngine:
         eq_highs_lows = calculate_equal_highs_lows(current_candles, swings, config)
         all_liquidity = pdh_pdl + pwh_pwl + eq_highs_lows
 
-        # 6. Trendlines (Focus on 1H & 30M)
+        # 6. Trendlines (Focus on Intraday Execution: 1H, 30M, 15M, 5M, 1M)
         trendlines = []
-        if tf in ["1H", "30M"]:
+        if tf in ["1H", "30M", "15M", "5M", "1M"]:
             trendlines = calculate_trendlines(current_candles, swings, tf, config)
         elif h1_candles:
             h1_swings = find_swings(h1_candles, "1H", window=config.swing_window)

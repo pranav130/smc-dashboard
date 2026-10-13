@@ -1110,13 +1110,9 @@ setInterval(() => {
 function setupFullscreenToggle() {
   const chartPanel = document.querySelector(".chart-panel");
   const container = document.getElementById("chart");
-  const fsTriggers = [
-    document.getElementById("btnFullscreen"),
-    document.getElementById("btnHeaderFs"),
-    document.getElementById("btnChartCornerFs"),
-  ].filter(Boolean);
+  const btnFs = document.getElementById("btnFullscreen");
 
-  if (!chartPanel) return;
+  if (!chartPanel || !btnFs) return;
 
   function resizeChart() {
     if (chart && container) {
@@ -1131,21 +1127,12 @@ function setupFullscreenToggle() {
   }
 
   function updateUiState(isFs) {
-    document.querySelectorAll(".fs-icon-exp").forEach((el) => {
-      el.style.display = isFs ? "none" : "inline";
-    });
-    document.querySelectorAll(".fs-icon-cmp").forEach((el) => {
-      el.style.display = isFs ? "inline" : "none";
-    });
-    document.querySelectorAll(".fs-label").forEach((el) => {
-      el.textContent = isFs ? "Exit Full Screen" : "Full Screen";
-    });
-    const oldFsText = document.getElementById("fsBtnText");
-    if (oldFsText) oldFsText.textContent = isFs ? "Exit Full Screen" : "Full Screen";
-    const oldExpand = document.getElementById("fsIconExpand");
-    if (oldExpand) oldExpand.style.display = isFs ? "none" : "inline";
-    const oldCompress = document.getElementById("fsIconCompress");
-    if (oldCompress) oldCompress.style.display = isFs ? "inline" : "none";
+    const fsText = document.getElementById("fsBtnText");
+    if (fsText) fsText.textContent = isFs ? "Exit Full Screen" : "Full Screen";
+    const expandIcon = document.getElementById("fsIconExpand");
+    if (expandIcon) expandIcon.style.display = isFs ? "none" : "inline";
+    const compressIcon = document.getElementById("fsIconCompress");
+    if (compressIcon) compressIcon.style.display = isFs ? "inline" : "none";
   }
 
   function toggleFullscreen() {
@@ -1164,9 +1151,7 @@ function setupFullscreenToggle() {
     resizeChart();
   }
 
-  fsTriggers.forEach((btn) => {
-    btn.addEventListener("click", toggleFullscreen);
-  });
+  btnFs.addEventListener("click", toggleFullscreen);
 
   document.addEventListener("fullscreenchange", () => {
     const isNativeFs = Boolean(document.fullscreenElement);

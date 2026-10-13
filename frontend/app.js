@@ -434,18 +434,18 @@ function drawChartMarkers(analysis) {
     markers.push({
       time: s.time,
       position: s.type === "high" ? "aboveBar" : "belowBar",
-      color: s.type === "high" ? "#ef5350" : "#26a69a",
+      color: s.type === "high" ? "#f23645" : "#089981",
       shape: s.type === "high" ? "arrowDown" : "arrowUp",
       text: s.label || (s.type === "high" ? "SH" : "SL"),
     });
   });
 
-  // Structure breaks (BoS / CHoCH)
+  // Structure breaks (BoS / CHoCH) - darkened for clear high-contrast readability
   (analysis.bos_signals || []).slice(-4).forEach((b) => {
     markers.push({
       time: b.time,
       position: b.type === "bullish" ? "aboveBar" : "belowBar",
-      color: b.kind === "CHoCH" ? "#ffeb3b" : "#4fc3f7",
+      color: b.kind === "CHoCH" ? "#d97706" : "#0284c7",
       shape: "circle",
       text: `${b.kind} (${b.retracement_pct}%)`,
     });

@@ -44,13 +44,18 @@
         <span class="pulse-dot"></span>
         <span id="connStatusText">LIVE</span>
       </div>
-      <a href="/paper" class="btn-tool btn-paper-nav" id="btnOpenPaper" target="_blank" rel="noopener" title="Open 24/7 Paper Trading Dashboard in a new tab">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+      <a href="/paper" class="btn-paper-nav" id="btnOpenPaper" target="_blank" rel="noopener" title="Open Dedicated 24/7 Paper Trading Dashboard in a new tab">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
         <span>Paper Trading ↗</span>
       </a>
       <button class="btn-tool" id="btnToggleDetails" title="Toggle Instrument Metadata & Feed Diagnostics">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
         <span id="detailsBtnText">Details ▾</span>
+      </button>
+      <button class="btn-tool" id="btnThemeToggle" title="Toggle Light / Dark Theme">
+        <svg id="themeIconSun" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none;"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+        <svg id="themeIconMoon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        <span id="themeToggleText">Light</span>
       </button>
       <button class="btn-tool btn-sync" id="btnRefresh" title="Resync Historical Candles from Delta Exchange India">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
@@ -488,6 +493,9 @@
       <button class="rail-btn" data-pane="pane-liquidity" title="Hidden Liquidity & Heatmap Radar" style="color: #c084fc;">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="2"/></svg>
       </button>
+      <a href="/paper" class="rail-btn rail-btn-paper" target="_blank" rel="noopener" title="Paper Trading Dashboard (Open in new tab)" style="color: #26a69a; text-decoration: none; display: flex; align-items: center; justify-content: center; margin-top: auto; border-top: 1px solid var(--border);">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+      </a>
     </nav>
 
   </div>

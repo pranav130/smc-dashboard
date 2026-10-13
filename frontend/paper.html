@@ -3,200 +3,419 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>XAUTUSD Paper Trading · 24/7 Persistent Simulated Command Center</title>
+  <title>XAUTUSD Paper Trading Dashboard · Simulated Execution</title>
+  <link rel="stylesheet" href="/static/styles.css">
   <link rel="stylesheet" href="/static/paper.css">
 </head>
-<body>
-
-  <!-- Top Header -->
+<body class="paper-body">
+  <!-- 1. DASHBOARD HEADER -->
   <header class="paper-header">
-    <div class="header-left">
-      <a href="/" class="btn-back" title="Return to Main SMC Terminal">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
-        <span>Main Terminal</span>
-      </a>
-      <div class="brand-divider"></div>
+    <div class="header-brand">
+      <a class="nav-back-link" href="/" title="Return to Main SMC Dashboard">← SMC Dashboard</a>
       <div class="brand-title">
-        <span class="badge-mode">24/7 SIMULATION</span>
-        <span class="title-text">XAUTUSD Paper Trading Command Center</span>
+        <h1>XAUTUSD Paper Trading</h1>
+        <span class="badge-tag">ISOLATED SIMULATOR</span>
       </div>
     </div>
 
-    <div class="header-right">
-      <div class="status-indicator" id="monitorStatus">
-        <span class="status-dot pulse"></span>
-        <span id="monitorStatusText">24/7 CLOUD MONITOR ACTIVE</span>
+    <div class="header-market">
+      <div class="market-pill">
+        <span class="muted-label">PRICE</span>
+        <span class="mono-val" id="hdrPrice">—</span>
       </div>
-      <button class="btn-action" id="btnToggleAuto" title="Toggle Automated Paper Trades from SMC Setups">
-        <span id="autoTradingText">Auto-Execute Signals: ON</span>
-      </button>
-      <button class="btn-action btn-danger" id="btnResetAccount" title="Reset Paper Account Balance">
-        Reset Balance
-      </button>
+      <div class="market-pill">
+        <span class="muted-label">FEED</span>
+        <span class="status-indicator" id="hdrFeedStatus">CHECKING</span>
+      </div>
+      <div class="market-pill">
+        <span class="muted-label">UPDATED</span>
+        <span class="mono-val" id="hdrLastUpdate">—</span>
+      </div>
+    </div>
+
+    <div class="header-summary">
+      <div class="summary-pill">
+        <span class="muted-label">EQUITY</span>
+        <span class="mono-val text-bold" id="hdrEquity">—</span>
+      </div>
+      <div class="summary-pill">
+        <span class="muted-label">UNREALIZED</span>
+        <span class="mono-val" id="hdrUnrealized">—</span>
+      </div>
+      <div class="summary-pill">
+        <span class="muted-label">REALIZED</span>
+        <span class="mono-val" id="hdrRealized">—</span>
+      </div>
+      <div class="summary-pill">
+        <span class="muted-label">TODAY</span>
+        <span class="mono-val" id="hdrDaily">—</span>
+      </div>
+    </div>
+
+    <div class="header-badges">
+      <span class="badge-paper-safe">PAPER ONLY — NO REAL ORDERS</span>
+      <span class="badge-engine" id="engineStatusBadge">STOPPED</span>
     </div>
   </header>
 
-  <!-- Main Content Layout -->
+  <!-- 2. STATUS & ALERTS BANNER -->
+  <div class="paper-banner" id="paperBanner">
+    <div class="banner-content">
+      <span class="banner-icon" id="bannerIcon">ℹ️</span>
+      <span class="banner-text" id="bannerText">Paper engine is currently stopped. No trades are being simulated.</span>
+    </div>
+    <div class="banner-actions">
+      <button class="btn-sm btn-outline-sync" id="btnDemoTrade" title="Simulate a test trade immediately to verify execution">⚡ Test Trade</button>
+      <button class="btn-sm" id="btnOpenConfig">Risk Settings</button>
+      <button class="btn-sm btn-outline-sync" id="btnManualTick">Tick Now</button>
+    </div>
+  </div>
+
+  <!-- MAIN DASHBOARD CONTENT -->
   <main class="paper-container">
 
-    <!-- KPI Metric Cards Grid -->
-    <section class="kpi-grid">
-      <div class="kpi-card">
-        <div class="kpi-label">Simulated Balance</div>
-        <div class="kpi-value highlight" id="statBalance">$10,000.00</div>
-        <div class="kpi-sub">Cash reserve (USD)</div>
+    <!-- 3. CONTROLS BAR -->
+    <section class="controls-card">
+      <div class="controls-title">
+        <h2>Engine Controls</h2>
+        <span class="controls-sub">Safety-enforced local simulated trading execution</span>
       </div>
-      <div class="kpi-card">
-        <div class="kpi-label">Account Equity</div>
-        <div class="kpi-value" id="statEquity">$10,000.00</div>
-        <div class="kpi-sub">Balance + Open P&L</div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-label">Unrealized P&L</div>
-        <div class="kpi-value" id="statUnrealizedPnl">$0.00</div>
-        <div class="kpi-sub" id="statUnrealizedPct">0.00%</div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-label">Realized Net P&L</div>
-        <div class="kpi-value" id="statRealizedPnl">$0.00</div>
-        <div class="kpi-sub" id="statTradesCount">0 Trades Closed</div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-label">Win Rate</div>
-        <div class="kpi-value" id="statWinRate">0.0%</div>
-        <div class="kpi-sub" id="statWinRatio">0W / 0L</div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-label">Gold Price Reference</div>
-        <div class="kpi-value gold" id="statGoldPrice">--.--</div>
-        <div class="kpi-sub">Delta India Benchmark Spot</div>
+      <div class="controls-group">
+        <button class="btn-ctrl btn-start" id="btnStart" title="Start simulation of confirmed ACTIVE setups">▶ Start Paper Engine</button>
+        <button class="btn-ctrl btn-pause" id="btnPause" title="Pause new entries while maintaining open position SL/TP monitoring">⏸ Pause</button>
+        <button class="btn-ctrl btn-resume" id="btnResume" title="Resume paper entries" style="display:none;">▶ Resume</button>
+        <button class="btn-ctrl btn-stop" id="btnStop" title="Stop paper engine">⏹ Stop</button>
+        <button class="btn-ctrl btn-danger" id="btnEmergencyStop" title="Emergency stop: completely halt entries and trigger kill switch">🚨 Emergency Stop</button>
+        <button class="btn-ctrl btn-warning" id="btnResetStop" title="Clear emergency stop lock" style="display:none;">🔓 Clear Stop Lock</button>
+        <button class="btn-ctrl btn-secondary" id="btnCloseAll" title="Close all open paper positions immediately">Close All Positions</button>
+        <button class="btn-ctrl btn-reset" id="btnResetAccount" title="Reset paper account ledger to starting balance">Reset Account</button>
       </div>
     </section>
 
-    <!-- Operational Panels: New Order & Open Positions -->
-    <div class="dashboard-split">
-      
-      <!-- Panel 1: Open Paper Positions -->
-      <section class="panel-box positions-panel">
-        <div class="panel-header">
-          <div class="panel-title">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-            Active Open Positions (<span id="openCount">0</span>)
-          </div>
-          <span class="refresh-clock" id="lastRefreshTime">Updated just now</span>
-        </div>
-        <div class="table-wrap">
-          <table class="data-table" id="positionsTable">
-            <thead>
-              <tr>
-                <th>Symbol</th>
-                <th>Side</th>
-                <th>Qty</th>
-                <th>Entry</th>
-                <th>Current</th>
-                <th>Stop Loss</th>
-                <th>Take Profit</th>
-                <th>P&L ($)</th>
-                <th>Strategy</th>
-                <th>Action</th>
-              </tr>
-            </thead>
-            <tbody id="positionsTbody">
-              <tr>
-                <td colspan="10" class="empty-state">No open positions currently. Monitoring market 24/7 for SMC setups.</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
+    <!-- 4. ACCOUNT OVERVIEW CARDS (11 Required Metrics) -->
+    <section class="metrics-grid">
+      <div class="stat-card">
+        <span class="stat-label">Starting Balance</span>
+        <span class="stat-value" id="cardStartBalance">$10,000.00</span>
+        <span class="stat-sub">Virtual capital base</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Current Equity</span>
+        <span class="stat-value" id="cardCurrentEquity">—</span>
+        <span class="stat-sub">Realized + Unrealized</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Available Balance</span>
+        <span class="stat-value" id="cardAvailableBalance">—</span>
+        <span class="stat-sub">Uncommitted capital</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Total Unrealized P&amp;L</span>
+        <span class="stat-value" id="cardUnrealizedPnl">—</span>
+        <span class="stat-sub">Open positions</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Total Realized P&amp;L</span>
+        <span class="stat-value" id="cardRealizedPnl">—</span>
+        <span class="stat-sub">Closed trades net</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Daily P&amp;L</span>
+        <span class="stat-value" id="cardDailyPnl">—</span>
+        <span class="stat-sub" id="cardDailyPnlPct">0.00%</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Open Positions</span>
+        <span class="stat-value" id="cardOpenCount">0</span>
+        <span class="stat-sub" id="cardMaxPosLimit">Max 1 allowed</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Completed Trades</span>
+        <span class="stat-value" id="cardCompletedCount">0</span>
+        <span class="stat-sub">Simulated history</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Win Rate</span>
+        <span class="stat-value" id="cardWinRate">0.0%</span>
+        <span class="stat-sub" id="cardWinLoss">0 wins / 0 trades</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Profit Factor</span>
+        <span class="stat-value" id="cardProfitFactor">—</span>
+        <span class="stat-sub">Gross win / Gross loss</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Max Drawdown</span>
+        <span class="stat-value text-bear" id="cardMaxDrawdown">0.00%</span>
+        <span class="stat-sub" id="cardMaxDrawdownAmt">$0.00 from peak</span>
+      </div>
+    </section>
 
-      <!-- Panel 2: Manual Simulated Order Placement -->
-      <section class="panel-box order-panel">
-        <div class="panel-header">
-          <div class="panel-title">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
-            Simulated Paper Order
-          </div>
-          <span class="badge-lock">STRICT SIMULATION</span>
-        </div>
-        <form class="order-form" id="orderForm">
-          <div class="form-row">
-            <label>Direction</label>
-            <div class="side-selector">
-              <button type="button" class="btn-side side-buy active" data-side="BUY">BUY / LONG</button>
-              <button type="button" class="btn-side side-sell" data-side="SELL">SELL / SHORT</button>
-            </div>
-          </div>
-          <div class="form-row">
-            <label for="orderQty">Size (Ounces)</label>
-            <input type="number" id="orderQty" step="0.01" min="0.01" max="10" value="0.10" required>
-          </div>
-          <div class="form-row">
-            <label for="orderSL">Stop Loss (USD)</label>
-            <input type="number" id="orderSL" step="0.1" placeholder="Optional stop price" required>
-          </div>
-          <div class="form-row">
-            <label for="orderTP">Take Profit (USD)</label>
-            <input type="number" id="orderTP" step="0.1" placeholder="Optional target price" required>
-          </div>
-          <div class="form-row">
-            <label for="orderStrategy">Strategy Tag</label>
-            <input type="text" id="orderStrategy" value="Manual Discretionary Paper Trade" required>
-          </div>
-          <button type="submit" class="btn-submit" id="btnPlaceOrder">Place Simulated Order</button>
-        </form>
-      </section>
-
-    </div>
-
-    <!-- Panel 3: Closed Trade History -->
-    <section class="panel-box trades-panel">
+    <!-- 5. CONFIRMED-SIGNAL PANEL -->
+    <section class="panel-section">
       <div class="panel-header">
-        <div class="panel-title">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-          Historical Closed Trades (Persistent Database)
+        <div class="panel-title-group">
+          <h2>Confirmed SMC Signal Pipeline</h2>
+          <span class="panel-badge">1H PIPELINE SOURCE</span>
+        </div>
+        <div class="panel-actions">
+          <span class="eligibility-tag" id="signalEligibilityTag">WAITING FOR SIGNAL</span>
         </div>
       </div>
-      <div class="table-wrap">
-        <table class="data-table" id="tradesTable">
+      <div class="signal-details-grid" id="signalDetailsGrid">
+        <div class="signal-field">
+          <span class="field-label">Setup ID</span>
+          <span class="field-value mono-val" id="sigSetupId">—</span>
+        </div>
+        <div class="signal-field">
+          <span class="field-label">Symbol / Timeframe</span>
+          <span class="field-value mono-val" id="sigSymbolTf">XAUTUSD · 1H</span>
+        </div>
+        <div class="signal-field">
+          <span class="field-label">Direction</span>
+          <span class="field-value" id="sigDirection">—</span>
+        </div>
+        <div class="signal-field">
+          <span class="field-label">Setup State</span>
+          <span class="field-value" id="sigState">—</span>
+        </div>
+        <div class="signal-field">
+          <span class="field-label">Entry Zone</span>
+          <span class="field-value mono-val" id="sigEntryZone">—</span>
+        </div>
+        <div class="signal-field">
+          <span class="field-label">Planned Entry</span>
+          <span class="field-value mono-val" id="sigEntryPrice">—</span>
+        </div>
+        <div class="signal-field">
+          <span class="field-label">Stop Loss</span>
+          <span class="field-value mono-val text-bear" id="sigStopLoss">—</span>
+        </div>
+        <div class="signal-field">
+          <span class="field-label">Take Profit</span>
+          <span class="field-value mono-val text-bull" id="sigTakeProfit">—</span>
+        </div>
+        <div class="signal-field">
+          <span class="field-label">Risk/Reward</span>
+          <span class="field-value mono-val" id="sigRrRatio">—</span>
+        </div>
+        <div class="signal-field">
+          <span class="field-label">Activation Time</span>
+          <span class="field-value mono-val" id="sigActivationTime">—</span>
+        </div>
+      </div>
+      <div class="signal-status-box" id="sigReasonBox">
+        <span class="status-box-title">Paper Eligibility Diagnostic:</span>
+        <span class="status-box-text" id="sigDiagnosticText">No active signal in market engine. Only setups confirmed strictly as ACTIVE are eligible.</span>
+      </div>
+    </section>
+
+    <!-- 6. OPEN POSITIONS -->
+    <section class="panel-section">
+      <div class="panel-header">
+        <div class="panel-title-group">
+          <h2>Open Simulated Positions</h2>
+          <span class="count-pill" id="openPosBadge">0 Active</span>
+        </div>
+      </div>
+      <div class="table-responsive">
+        <table class="paper-table" id="tablePositions">
           <thead>
             <tr>
-              <th>Trade ID</th>
-              <th>Side</th>
-              <th>Qty</th>
+              <th>Position ID</th>
+              <th>Setup ID</th>
+              <th>Direction</th>
               <th>Entry Price</th>
-              <th>Exit Price</th>
-              <th>Net P&L ($)</th>
-              <th>Return (%)</th>
-              <th>Duration</th>
-              <th>Exit Reason</th>
-              <th>Exit Time (IST)</th>
-              <th>Strategy</th>
+              <th>Mark Price</th>
+              <th>Quantity</th>
+              <th>Notional</th>
+              <th>Stop Loss</th>
+              <th>Take Profit</th>
+              <th>Unrealized P&amp;L</th>
+              <th>Fees</th>
+              <th>Opened</th>
+              <th>Action</th>
             </tr>
           </thead>
-          <tbody id="tradesTbody">
-            <tr>
-              <td colspan="11" class="empty-state">No closed trade records yet. Completed trades will persist here across server restarts.</td>
-            </tr>
+          <tbody id="tbodyPositions">
+            <tr><td colspan="13" class="empty-state">No open simulated positions.</td></tr>
           </tbody>
         </table>
       </div>
     </section>
 
-    <!-- Panel 4: 24/7 Activity & Audit Log -->
-    <section class="panel-box logs-panel">
+    <!-- 7. ORDERS & TRADE HISTORY TABS -->
+    <section class="panel-section">
       <div class="panel-header">
-        <div class="panel-title">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
-          24/7 System & Trade Audit Log
+        <div class="tab-controls">
+          <button class="tab-btn active" id="tabBtnTrades">Completed Trades</button>
+          <button class="tab-btn" id="tabBtnOrders">Simulated Orders</button>
+        </div>
+        <div class="filter-controls">
+          <input type="text" class="input-search" id="filterSearch" placeholder="Filter Setup ID / ID...">
+          <select class="select-filter" id="filterDirection">
+            <option value="ALL">All Directions</option>
+            <option value="LONG">LONG</option>
+            <option value="SHORT">SHORT</option>
+          </select>
         </div>
       </div>
-      <div class="log-stream" id="logStream">
-        <div class="log-line info">[INIT] 24/7 Continuous Paper Engine loaded. Persistent database connected.</div>
+
+      <!-- TRADES VIEW -->
+      <div class="tab-content" id="viewTrades">
+        <div class="table-responsive">
+          <table class="paper-table" id="tableTrades">
+            <thead>
+              <tr>
+                <th>Trade ID</th>
+                <th>Setup ID</th>
+                <th>Direction</th>
+                <th>Entry Price</th>
+                <th>Exit Price</th>
+                <th>Quantity</th>
+                <th>Gross P&amp;L</th>
+                <th>Fees (In + Out)</th>
+                <th>Net P&amp;L</th>
+                <th>Exit Reason</th>
+                <th>Opened</th>
+                <th>Closed</th>
+              </tr>
+            </thead>
+            <tbody id="tbodyTrades">
+              <tr><td colspan="12" class="empty-state">No completed trades yet.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ORDERS VIEW -->
+      <div class="tab-content" id="viewOrders" style="display: none;">
+        <div class="table-responsive">
+          <table class="paper-table" id="tableOrders">
+            <thead>
+              <tr>
+                <th>Order ID</th>
+                <th>Setup ID</th>
+                <th>Side</th>
+                <th>Type</th>
+                <th>Requested</th>
+                <th>Fill Price</th>
+                <th>Quantity</th>
+                <th>Status</th>
+                <th>Fee</th>
+                <th>Created At</th>
+              </tr>
+            </thead>
+            <tbody id="tbodyOrders">
+              <tr><td colspan="10" class="empty-state">No simulated orders logged.</td></tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </section>
 
+    <!-- 8. AUDIT & EVENT LOG -->
+    <section class="panel-section">
+      <div class="panel-header">
+        <div class="panel-title-group">
+          <h2>Simulated Execution Audit Log</h2>
+          <span class="count-pill" id="eventCountBadge">0 Events</span>
+        </div>
+        <div class="filter-controls">
+          <button class="btn-sm btn-outline-sync" id="btnClearAuditFilter">Reset Filter</button>
+        </div>
+      </div>
+      <div class="table-responsive">
+        <table class="paper-table table-audit" id="tableEvents">
+          <thead>
+            <tr>
+              <th style="width: 170px;">Timestamp</th>
+              <th style="width: 180px;">Event Type</th>
+              <th style="width: 150px;">Setup ID</th>
+              <th>Details &amp; Audit Diagnostic</th>
+            </tr>
+          </thead>
+          <tbody id="tbodyEvents">
+            <tr><td colspan="4" class="empty-state">No execution events recorded.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- FOOTNOTE DISCLAIMER -->
+    <footer class="paper-footer">
+      <p class="disclaimer-text">
+        <strong>Paper Trading Architecture &amp; Boundary Notice:</strong> This simulation engine executes strictly in local SQLite and memory. No Delta Exchange private authentication, API keys, or live order-routing calls are loaded or invoked. Fill prices, slippage, and fees are calculated using standard institutional paper execution models. Market data is fed directly from the Delta Exchange Spot Index feed (<code class="mono-code">.DEXAUTUSD</code>).
+      </p>
+    </footer>
+
   </main>
+
+  <!-- MODAL: RISK CONFIGURATION -->
+  <div class="modal-overlay" id="modalConfig" style="display: none;">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>Simulated Risk Parameters</h3>
+        <button class="modal-close" id="btnCloseConfigModal">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="cfgStartingEquity">Starting Virtual Equity ($)</label>
+          <input type="number" id="cfgStartingEquity" step="100" min="100">
+        </div>
+        <div class="form-group">
+          <label for="cfgRiskFraction">Risk Per Trade Fraction (0.0025 = 0.25%)</label>
+          <input type="number" id="cfgRiskFraction" step="0.0005" min="0.0001" max="0.1">
+        </div>
+        <div class="form-group">
+          <label for="cfgDailyLossFraction">Max Daily Loss Fraction (0.01 = 1%)</label>
+          <input type="number" id="cfgDailyLossFraction" step="0.005" min="0.001" max="0.2">
+        </div>
+        <div class="form-group">
+          <label for="cfgMaxPositions">Max Simultaneous Positions</label>
+          <input type="number" id="cfgMaxPositions" step="1" min="1" max="10">
+        </div>
+        <div class="form-group">
+          <label for="cfgMaxNotional">Max Notional Cap ($)</label>
+          <input type="number" id="cfgMaxNotional" step="100" min="100">
+        </div>
+        <div class="form-group">
+          <label for="cfgFeeRate">Simulated Fee Rate (0.0005 = 0.05%)</label>
+          <input type="number" id="cfgFeeRate" step="0.0001" min="0">
+        </div>
+        <div class="form-group">
+          <label for="cfgSlippageBps">Simulated Slippage (Basis Points)</label>
+          <input type="number" id="cfgSlippageBps" step="0.5" min="0">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-ctrl btn-secondary" id="btnCancelConfig">Cancel</button>
+        <button class="btn-ctrl btn-start" id="btnSaveConfig">Save Settings</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: CONFIRM ACCOUNT RESET -->
+  <div class="modal-overlay" id="modalResetConfirm" style="display: none;">
+    <div class="modal-card modal-danger">
+      <div class="modal-header">
+        <h3>Reset Simulated Account</h3>
+        <button class="modal-close" id="btnCloseResetModal">×</button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-warning-text">
+          ⚠️ <strong>Are you sure you want to reset the paper trading account?</strong>
+        </p>
+        <p class="modal-detail-text">
+          This will permanently wipe all simulated orders, open positions, closed trade history, and execution logs. Your virtual balance will be restored to your configured starting equity ($10,000.00).
+        </p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-ctrl btn-secondary" id="btnCancelReset">Cancel</button>
+        <button class="btn-ctrl btn-danger" id="btnConfirmReset">Yes, Reset Paper Ledger</button>
+      </div>
+    </div>
+  </div>
 
   <script src="/static/paper.js"></script>
 </body>

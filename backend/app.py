@@ -4,7 +4,7 @@ import time
 import logging
 from contextlib import asynccontextmanager
 from typing import Set, Optional, Dict, Any
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query, Header, HTTPException, Body
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query, Header, HTTPException, Body, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
@@ -27,6 +27,7 @@ from backend.smc.engine import SMCEngine
 from backend.paper.database import init_db, get_db
 from backend.paper.engine import PaperTradingEngine
 from backend.paper.models import PaperLogModel
+from backend import paper_trading
 
 logger = logging.getLogger("App")
 logging.basicConfig(level=logging.INFO)
@@ -50,6 +51,7 @@ def broadcast_live_update(timeframe: str, candle: Candle):
     # 1. Immediately evaluate paper trading positions on price tick
     if candle.close > 0:
         paper_engine.on_tick(candle.close, candle.time)
+        paper_trading.mark_to_market(candle.close)
 
     # 2. Broadcast to connected browser clients if any exist
     if not connected_clients:
@@ -141,6 +143,7 @@ async def _background_market_monitor_loop():
 
             # Update open paper positions
             paper_engine.on_tick(current_price)
+            paper_trading.mark_to_market(current_price)
 
             # Evaluate multi-timeframe SMC signals for paper trading
             candles_by_tf = {
@@ -150,6 +153,17 @@ async def _background_market_monitor_loop():
             status = get_current_status("1H")
             analysis = smc_engine.analyze_multi_timeframe(candles_by_tf, "1H", is_stale=status.is_stale)
             paper_engine.evaluate_signals_for_paper_trading(analysis, current_price)
+
+            terminal = analysis.get("terminal_state") or {}
+            setup = terminal.get("active_setup") or {}
+            if hasattr(setup, "model_dump"):
+                setup = setup.model_dump()
+            paper_trading.evaluate(
+                setup,
+                current_price,
+                status.last_update_timestamp,
+                status.is_stale,
+            )
 
         except asyncio.CancelledError:
             logger.info("24/7 Background Market Monitoring loop stopped.")
@@ -380,81 +394,130 @@ async def refresh_market_data():
     return {"success": True, "message": "Refreshed historical candles for all timeframes (>= 24h data)"}
 
 # ==============================================================================
-# Paper Trading API Endpoints (24/7 Simulated Trading & Records)
+# Isolated Paper Trading API Endpoints
 # ==============================================================================
+@app.get("/api/paper/status")
 @app.get("/api/paper/summary")
-async def get_paper_summary():
-    """Retrieve simulated account metrics, equity, win rate, and monitoring state."""
-    summary = paper_engine.get_account_summary()
-    return {"success": True, "data": summary}
+async def get_paper_status():
+    return paper_trading.status()
 
 @app.get("/api/paper/positions")
-async def get_paper_positions():
-    """Retrieve currently active open simulated positions."""
-    positions = paper_engine.get_open_positions()
-    return {"success": True, "positions": positions, "count": len(positions)}
+async def get_paper_positions(status: Optional[str] = Query(None)):
+    return paper_trading.get_positions(status_filter=status)
+
+@app.get("/api/paper/orders")
+async def get_paper_orders():
+    return paper_trading.get_orders()
 
 @app.get("/api/paper/trades")
 async def get_paper_trades(limit: int = Query(100)):
-    """Retrieve historical closed paper trades."""
-    trades = paper_engine.get_trade_history(limit=limit)
-    return {"success": True, "trades": trades, "count": len(trades)}
+    return paper_trading.get_trades()
 
-@app.post("/api/paper/order")
-async def place_paper_order(
-    direction: str = Body(..., embed=True),
-    quantity: float = Body(0.0, embed=True),
-    stop_loss: float = Body(0.0, embed=True),
-    take_profit: float = Body(0.0, embed=True),
-    strategy: str = Body("Manual Paper Trade", embed=True)
-):
-    """Open a simulated paper position at current market price."""
-    current_price = paper_engine.last_price
-    if current_price <= 0:
-        candles = adapter.get_candles("1H")
-        if candles:
-            current_price = candles[-1].close
-    if current_price <= 0:
-        raise HTTPException(status_code=400, detail="Market price not available yet.")
+@app.get("/api/paper/events")
+@app.get("/api/paper/logs")
+async def get_paper_events(limit: int = Query(100)):
+    return paper_trading.get_events()
 
-    res = paper_engine.open_paper_order(
-        symbol=DEFAULT_SYMBOL,
-        direction=direction,
-        entry_price=current_price,
-        quantity=quantity,
-        stop_loss=stop_loss,
-        take_profit=take_profit,
-        strategy=strategy
-    )
-    return res
+@app.get("/api/paper/config")
+async def get_paper_config():
+    return paper_trading.get_config()
+
+@app.post("/api/paper/config")
+async def update_paper_config(payload: Dict[str, Any] = Body(...)):
+    try:
+        updated = paper_trading.update_config(payload)
+        return {"success": True, "config": updated}
+    except Exception as e:
+        return {"success": False, "message": str(e)}
+
+@app.post("/api/paper/control/{action}")
+async def paper_control(action: str, request: Request):
+    payload = {}
+    try:
+        payload = await request.json()
+    except Exception:
+        pass
+    return paper_trading.control(action, payload)
+
+@app.post("/api/paper/positions/{position_id}/close")
+async def paper_close_position_by_id(position_id: str):
+    return paper_trading.close_position(position_id)
 
 @app.post("/api/paper/close")
-async def close_paper_position(position_id: str = Body(..., embed=True)):
-    """Close an open paper position at current market price."""
-    res = paper_engine.close_position_manually(position_id)
-    return res
+async def paper_close_position(request: Request):
+    target_id = None
+    try:
+        body = await request.json()
+        target_id = body.get("position_id")
+    except Exception:
+        pass
+    if not target_id:
+        return {"success": False, "message": "Missing position_id"}
+    return paper_trading.close_position(target_id)
 
-@app.post("/api/paper/toggle-auto")
-async def toggle_auto_paper_trading(enabled: bool = Body(..., embed=True)):
-    """Enable or disable automatic paper trade execution from SMC setup signals."""
-    return paper_engine.set_auto_trading(enabled)
+@app.post("/api/paper/tick")
+async def paper_tick():
+    tf = "1H"
+    candles_by_tf = {
+        name: adapter.get_candles(name)
+        for name in ["1D", "4H", "1H", "30M", "15M", "5M", "1M"]
+    }
+    status = get_current_status(tf)
+    analysis = smc_engine.analyze_multi_timeframe(candles_by_tf, tf, is_stale=status.is_stale)
+    terminal = analysis.get("terminal_state") or {}
+    setup = terminal.get("active_setup") or {}
+    if hasattr(setup, "model_dump"):
+        setup = setup.model_dump()
 
-@app.post("/api/paper/reset")
-async def reset_paper_account(
-    balance: float = Body(10000.0, embed=True),
-    admin_key: Optional[str] = Header(None, alias="X-Admin-Key")
-):
-    """Reset simulated paper trading account. Protected by ADMIN_API_KEY if configured."""
-    if ADMIN_API_KEY and admin_key != ADMIN_API_KEY:
-        raise HTTPException(status_code=403, detail="Unauthorized: Invalid admin key.")
-    return paper_engine.reset_account(balance)
+    paper_trading.mark_to_market(status.current_price)
+    decision = paper_trading.evaluate(
+        setup,
+        status.current_price,
+        status.last_update_timestamp,
+        status.is_stale,
+    )
+    return {
+        "success": True,
+        "decision": decision,
+        "status": paper_trading.status(),
+        "active_setup": setup,
+        "terminal_state": terminal,
+        "market": {
+            "price": status.current_price,
+            "timestamp": status.last_update_timestamp,
+            "is_stale": status.is_stale,
+            "connection_status": status.connection_status,
+        },
+    }
 
-@app.get("/api/paper/logs")
-async def get_paper_logs(limit: int = Query(50)):
-    """Retrieve recent paper trading and monitoring audit events."""
-    with get_db() as db:
-        logs = db.query(PaperLogModel).order_by(PaperLogModel.timestamp.desc()).limit(limit).all()
-        return {"success": True, "logs": [l.to_dict() for l in logs]}
+@app.post("/api/paper/simulate-demo-trade")
+async def simulate_demo_trade():
+    tf = "1H"
+    status = get_current_status(tf)
+    price = status.current_price if status.current_price > 0 else 4160.0
+    ts = int(time.time())
+    paper_trading.control("start")
+    demo_setup = {
+        "id": f"demo_setup_{ts}",
+        "name": "Demo 1H Bullish Setup",
+        "direction": "bullish",
+        "timeframe": "1H",
+        "state": "ACTIVE",
+        "price": round(price, 2),
+        "top": round(price + 2.0, 2),
+        "bottom": round(price - 2.0, 2),
+        "invalidation_price": round(price - 10.0, 2),
+        "target_price": round(price + 20.0, 2),
+        "rr_ratio": 2.0,
+        "timestamp": ts,
+    }
+    decision = paper_trading.evaluate(demo_setup, price, ts, False)
+    return {
+        "success": True,
+        "decision": decision,
+        "status": paper_trading.status(),
+        "demo_setup": demo_setup,
+    }
 
 # ==============================================================================
 # WebSocket Endpoint for Live Frontend Streaming

@@ -160,6 +160,9 @@
             </button>
             <div class="dropdown-popover" id="overlaysPopover" style="display: none;">
               <div class="popover-title">Chart SMC Overlays</div>
+              <label class="toggle-pill highlight-pill" title="Isolate active setup zone, target, and invalidation while fading distant overlays">
+                <input type="checkbox" id="togFocusSetup"> <span class="dot focus-dot"></span> Focus Setup Mode
+              </label>
               <label class="toggle-pill" title="Higher Timeframe Fair Value Gaps (Daily & 4H) — Peacock Green: Bullish | Orange: Bearish">
                 <input type="checkbox" id="togHtfFvg" checked> <span class="dot htf-fvg"></span> HTF FVGs (1D/4H)
               </label>
@@ -186,6 +189,12 @@
               </label>
             </div>
           </div>
+
+          <!-- Focus Setup Quick Action Button -->
+          <button class="btn-focus-setup" id="btnFocusSetup" title="Toggle Focus Mode: Highlight active setup POI, Target & Invalidation while fading secondary overlays">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/><line x1="12" y1="2" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="2" y1="12" x2="5" y2="12"/><line x1="19" y1="12" x2="22" y2="12"/></svg>
+            <span id="focusSetupBtnText">Focus: OFF</span>
+          </button>
         </div>
 
         <div class="toolbar-right">
@@ -225,6 +234,11 @@
       <div class="drawer-body">
         <!-- Pane: Alerts -->
         <div class="drawer-pane" id="pane-alerts">
+          <div class="alerts-priority-header">
+            <div class="alert-count-pill pill-active"><span id="alertPaneActiveCount">0</span> ACTIVE</div>
+            <div class="alert-count-pill pill-watch"><span id="alertPaneWatchCount">0</span> WATCH</div>
+            <div class="alert-count-pill pill-risk"><span id="alertPaneRiskCount">0</span> RISK / FEED</div>
+          </div>
           <div id="alertsDrawerArea"></div>
         </div>
 
@@ -394,9 +408,13 @@
 
     <!-- Collapsed Narrow Icon Rail on the Far Right Edge (48px) -->
     <nav class="icon-rail" id="iconRail">
-      <button class="rail-btn" data-pane="pane-alerts" title="Active Alerts">
+      <button class="rail-btn" data-pane="pane-alerts" title="Active Alerts & Key-Level Transitions">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-        <span class="rail-badge" id="railAlertBadge" style="display: none;">0</span>
+        <div class="rail-badge-stack" id="railBadgeStack">
+          <span class="rail-micro-badge active-badge" id="badgeActiveCount" title="Active Setups" style="display: none;">0</span>
+          <span class="rail-micro-badge watch-badge" id="badgeWatchCount" title="Watch Setups" style="display: none;">0</span>
+          <span class="rail-micro-badge risk-badge" id="badgeRiskCount" title="Critical Risk/Data Events" style="display: none;">!</span>
+        </div>
       </button>
       <button class="rail-btn" data-pane="pane-setups" title="Trade-Readiness Watchlist">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>

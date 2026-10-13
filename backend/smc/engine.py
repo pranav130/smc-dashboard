@@ -311,30 +311,117 @@ class SMCEngine:
             else:
                 t_state = "IDLE"
 
-            # Invalidation condition
-            if entry.direction == "bullish":
-                inval_str = f"H1 candle close below {entry.bottom:.2f}" if entry.bottom is not None else f"Close below {entry.price * 0.998:.2f}"
-            elif entry.direction == "bearish":
-                inval_str = f"H1 candle close above {entry.top:.2f}" if entry.top is not None else f"Close above {entry.price * 1.002:.2f}"
-            else:
-                inval_str = "Break of structure opposing setup"
+            # Entry Zone Boundaries
+            entry_top = entry.top if entry.top is not None else entry.price
+            entry_bottom = entry.bottom if entry.bottom is not None else entry.price
+            entry_mid = entry.price
 
-            # Target & Reward/Risk calculation from real levels
+            # Invalidation Level (Stop Loss)
+            inval_price = None
+            if entry.direction == "bullish":
+                inval_price = entry_bottom if entry_bottom < entry_mid else round(entry_mid * 0.998, 2)
+                inval_str = f"Close below {inval_price:.2f}"
+            elif entry.direction == "bearish":
+                inval_price = entry_top if entry_top > entry_mid else round(entry_mid * 1.002, 2)
+                inval_str = f"Close above {inval_price:.2f}"
+            else:
+                inval_str = "Break of opposing structure"
+
+            # Target Identification & Lifecycle Verification
+            target_price = None
             target_str = "N/A"
+            is_target_reached = False
+            is_stop_breached = False
+
+            if entry.direction == "bullish":
+                # Valid targets must be strictly above entry zone top
+                bull_targets = [l for l in ranked_levels if l.price > (entry_top + 0.1)]
+                bull_targets.sort(key=lambda l: l.price)
+                if bull_targets:
+                    cand = bull_targets[0]
+                    target_price = cand.price
+                    target_str = f"{cand.name} ({cand.price:.2f})"
+                    # Lifecycle check: Has market price already reached or exceeded this target?
+                    if current_price >= target_price:
+                        is_target_reached = True
+                        target_str = f"{cand.name} ({cand.price:.2f}) [REACHED]"
+
+                # Invalidation breach check
+                if inval_price is not None and current_price <= inval_price:
+                    is_stop_breached = True
+
+            elif entry.direction == "bearish":
+                # Valid targets must be strictly below entry zone bottom
+                bear_targets = [l for l in ranked_levels if l.price < (entry_bottom - 0.1)]
+                bear_targets.sort(key=lambda l: l.price, reverse=True)
+                if bear_targets:
+                    cand = bear_targets[0]
+                    target_price = cand.price
+                    target_str = f"{cand.name} ({cand.price:.2f})"
+                    # Lifecycle check: Has market price already reached or fallen below this target?
+                    if current_price <= target_price:
+                        is_target_reached = True
+                        target_str = f"{cand.name} ({cand.price:.2f}) [REACHED]"
+
+                # Invalidation breach check
+                if inval_price is not None and current_price >= inval_price:
+                    is_stop_breached = True
+
+            # Determine setup state with strict lifecycle rules:
+            if is_target_reached:
+                t_state = "INVALIDATED"
+                state_reason = f"Target already reached (${target_price:.2f}). Setup expired."
+            elif is_stop_breached:
+                t_state = "INVALIDATED"
+                state_reason = f"Invalidation level breached (${inval_price:.2f}). Setup stopped out."
+            elif entry.state in ["SWEPT / MITIGATED", "INVALIDATED / PASSED"]:
+                t_state = "INVALIDATED"
+                state_reason = entry.state_reason
+            elif is_extreme:
+                t_state = "EXTREME"
+                state_reason = entry.state_reason
+            elif entry.state == "CHECKLIST REVIEW":
+                t_state = "ACTIVE"
+                state_reason = entry.state_reason
+            elif entry.state in ["SETUP TO INSPECT", "REACTION DEVELOPING", "AT KEY LEVEL", "APPROACHING"]:
+                t_state = "WATCH"
+                state_reason = entry.state_reason
+            else:
+                t_state = "IDLE"
+                state_reason = entry.state_reason
+
+            # Strict Reward / Risk validation
             rr_str = "N/A"
-            if entry.direction == "bullish" and nearest_above:
-                target_str = f"{nearest_above.name} ({nearest_above.price:.2f})"
-                if entry.bottom and (entry.price - entry.bottom) > 0 and (nearest_above.price - entry.price) > 0:
-                    rr_val = (nearest_above.price - entry.price) / (entry.price - entry.bottom)
-                    rr_str = f"1:{rr_val:.1f}"
-            elif entry.direction == "bearish" and nearest_below:
-                target_str = f"{nearest_below.name} ({nearest_below.price:.2f})"
-                if entry.top and (entry.top - entry.price) > 0 and (entry.price - nearest_below.price) > 0:
-                    rr_val = (entry.price - nearest_below.price) / (entry.top - entry.price)
-                    rr_str = f"1:{rr_val:.1f}"
+            if not is_target_reached and not is_stop_breached and t_state in ["EXTREME", "ACTIVE", "WATCH"]:
+                if entry.direction == "bullish" and target_price and inval_price:
+                    risk = entry_mid - inval_price
+                    reward = target_price - entry_mid
+                    # Validate directional ordering: inval < entry < target and current_price < target
+                    if risk > 0.05 and reward > 0.05 and inval_price < entry_bottom and target_price > entry_top and current_price < target_price:
+                        rr_val = reward / risk
+                        rr_str = f"1:{rr_val:.1f}"
+                elif entry.direction == "bearish" and target_price and inval_price:
+                    risk = inval_price - entry_mid
+                    reward = entry_mid - target_price
+                    # Validate directional ordering: target < entry < inval and current_price > target
+                    if risk > 0.05 and reward > 0.05 and inval_price > entry_top and target_price < entry_bottom and current_price > target_price:
+                        rr_val = reward / risk
+                        rr_str = f"1:{rr_val:.1f}"
 
             quality_label = "High Confluence" if is_extreme or entry.score >= 80 else ("Confirmed" if entry.state == "CHECKLIST REVIEW" else "Standard")
             zone_str = f"{entry.bottom:.2f} - {entry.top:.2f}" if (entry.bottom is not None and entry.top is not None) else f"{entry.price:.2f}"
+
+            dir_context = f"BULLISH BIAS (LONG CONTEXT)" if entry.direction == "bullish" else (f"BEARISH BIAS (SHORT CONTEXT)" if entry.direction == "bearish" else "NEUTRAL BIAS")
+            if t_state == "WATCH":
+                conf_status = "Waiting for confirmation"
+            elif t_state == "ACTIVE":
+                conf_status = "Checklist Confirmed"
+            elif t_state == "EXTREME":
+                conf_status = "Critical Confluence"
+            elif t_state == "INVALIDATED":
+                conf_status = "Setup Invalidated / Expired"
+            else:
+                conf_status = "Idle Surveillance"
 
             setup_card = ActiveSetupCardData(
                 id=entry.level_id,
@@ -349,11 +436,16 @@ class SMCEngine:
                 zone_str=zone_str,
                 distance=entry.distance,
                 distance_pct=entry.distance_pct,
-                reason=entry.state_reason,
+                reason=state_reason,
                 invalidation=inval_str,
+                invalidation_price=inval_price,
                 target=target_str,
+                target_price=target_price,
+                is_target_reached=is_target_reached,
                 reward_risk=rr_str,
                 quality=quality_label,
+                directional_context=dir_context,
+                confirmation_status=conf_status,
                 checklist=entry.checklist,
                 opposing_warning=entry.opposing_zone_warning,
                 last_event_ist=entry.last_event_ist or "N/A"
@@ -361,7 +453,7 @@ class SMCEngine:
             candidate_setups.append((t_state, entry.score, abs(entry.distance), setup_card))
 
         # Overall setup state determination
-        state_order = {"EXTREME": 5, "ACTIVE": 4, "WATCH": 3, "INVALIDATED": 2, "IDLE": 1}
+        state_order = {"EXTREME": 5000, "ACTIVE": 4000, "WATCH": 2000, "INVALIDATED": 100, "IDLE": 0}
         if any(c[0] == "EXTREME" for c in candidate_setups):
             terminal_setup_state = "EXTREME"
         elif any(c[0] == "ACTIVE" for c in candidate_setups):
@@ -374,12 +466,22 @@ class SMCEngine:
             terminal_setup_state = "IDLE"
 
         # Prioritize single active setup card to display prominently
+        # Requirement: 4Hr and Daily have priority!
+        TF_WEIGHTS = {"1D": 400, "4H": 300, "1H": 200, "30M": 100, "15M": 50, "5M": 20, "1M": 10}
+
         active_setup = None
         if candidate_setups:
             qualifying = [c for c in candidate_setups if c[0] in ["EXTREME", "ACTIVE", "WATCH"]]
             if not qualifying:
                 qualifying = candidate_setups
-            qualifying.sort(key=lambda x: (state_order.get(x[0], 0), x[1], -x[2]), reverse=True)
+            qualifying.sort(
+                key=lambda x: (
+                    state_order.get(x[0], 0) + TF_WEIGHTS.get(x[3].timeframe, 0),
+                    x[1],
+                    -x[2]
+                ),
+                reverse=True
+            )
             active_setup = qualifying[0][3]
 
         terminal_state = TerminalState(

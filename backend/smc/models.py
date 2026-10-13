@@ -436,9 +436,14 @@ class ActiveSetupCardData(BaseModel):
     distance_pct: float = 0.0
     reason: str = ""
     invalidation: str = ""
+    invalidation_price: Optional[float] = None
     target: str = "N/A"
+    target_price: Optional[float] = None
+    is_target_reached: bool = False
     reward_risk: str = "N/A"
     quality: str = "Standard"
+    directional_context: str = ""
+    confirmation_status: str = ""
     checklist: List[ChecklistItem] = Field(default_factory=list)
     opposing_warning: Optional[str] = None
     last_event_ist: Optional[str] = "N/A"

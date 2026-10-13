@@ -16,9 +16,11 @@ let ws = null;
 let lastUpdateTs = 0;
 let lastCandleTs = 0;
 let currentAnalysis = null;
+let latestCandle = null;
 let dismissedSetupId = null;
 let isDrawerPinned = false;
 let activeDrawerPane = null;
+let focusSetupMode = false;
 
 // Overlay Layer Toggles
 const layerToggles = {
@@ -41,6 +43,19 @@ const btnToggleDetails = document.getElementById("btnToggleDetails");
 const detailsBtnText = document.getElementById("detailsBtnText");
 const collapsibleDetails = document.getElementById("collapsibleDetails");
 const btnRefresh = document.getElementById("btnRefresh");
+
+// Focus Setup Controls
+const btnFocusSetup = document.getElementById("btnFocusSetup");
+const focusSetupBtnText = document.getElementById("focusSetupBtnText");
+const togFocusSetup = document.getElementById("togFocusSetup");
+
+// Alert Badge Counters
+const badgeActiveCount = document.getElementById("badgeActiveCount");
+const badgeWatchCount = document.getElementById("badgeWatchCount");
+const badgeRiskCount = document.getElementById("badgeRiskCount");
+const alertPaneActiveCount = document.getElementById("alertPaneActiveCount");
+const alertPaneWatchCount = document.getElementById("alertPaneWatchCount");
+const alertPaneRiskCount = document.getElementById("alertPaneRiskCount");
 
 // Status Panel Elements (inside Collapsible Details)
 const statInstrument = document.getElementById("statInstrument");
@@ -176,7 +191,7 @@ function initChart() {
 
   chart.subscribeCrosshairMove((param) => {
     if (!param.time || !param.seriesData.get(candleSeries)) {
-      if (lastCandleTs && currentAnalysis) {
+      if (currentAnalysis) {
         updateLegendFromAnalysis(currentAnalysis);
       }
       return;
@@ -185,8 +200,10 @@ function initChart() {
     const vData = param.seriesData.get(volumeSeries);
     if (cData) {
       const vVal = vData ? vData.value.toFixed(1) : "--";
+      const isLatest = latestCandle && param.time === toLocalChartTime(latestCandle.time);
+      const prefix = isLatest ? "[LATEST]" : "[HISTORICAL]";
       if (legendOHLC) {
-        legendOHLC.textContent = `O: ${cData.open.toFixed(2)}  H: ${cData.high.toFixed(2)}  L: ${cData.low.toFixed(2)}  C: ${cData.close.toFixed(2)}  V: ${vVal}`;
+        legendOHLC.textContent = `${prefix} O: ${cData.open.toFixed(2)}  H: ${cData.high.toFixed(2)}  L: ${cData.low.toFixed(2)}  C: ${cData.close.toFixed(2)}  V: ${vVal}`;
       }
     }
   });
@@ -208,8 +225,12 @@ function resizeChart() {
 
 function updateLegendFromAnalysis(analysis) {
   if (!legendOHLC || !analysis) return;
-  const price = analysis.current_price ? analysis.current_price.toFixed(2) : "--";
-  legendOHLC.textContent = `Price: ${price} USD · Status: Verified`;
+  const price = analysis.current_price ? analysis.current_price.toFixed(2) : (latestCandle ? latestCandle.close.toFixed(2) : "--");
+  if (latestCandle) {
+    legendOHLC.textContent = `[LATEST LIVE] O: ${latestCandle.open.toFixed(2)}  H: ${latestCandle.high.toFixed(2)}  L: ${latestCandle.low.toFixed(2)}  C: ${latestCandle.close.toFixed(2)} · Last: $${price} USD`;
+  } else {
+    legendOHLC.textContent = `[LATEST LIVE] Price: $${price} USD · Status: Verified`;
+  }
 }
 
 // --------------------------------------------------------------------------
@@ -236,7 +257,7 @@ async function loadSMCData(timeframe) {
       try { renderActiveSetupCard(data.analysis); } catch (e) { console.error("renderActiveSetupCard error:", e); }
       try { updateStatusPanel(data.status); } catch (e) { console.error("updateStatusPanel error:", e); }
       try { renderChartData(data.analysis); } catch (e) { console.error("renderChartData error:", e); }
-      try { renderWatchlist(data.analysis); } catch (e) { console.error("renderWatchlist error:", e); }
+      try { renderWatchlist(data.analysis, data.status); } catch (e) { console.error("renderWatchlist error:", e); }
       try { renderDrawerData(data.analysis); } catch (e) { console.error("renderDrawerData error:", e); }
     }
   } catch (err) {
@@ -344,24 +365,73 @@ function renderActiveSetupCard(analysis) {
     return;
   }
 
+  const state = setup.state || "WATCH";
   const isBull = setup.direction === "bullish";
-  const isExtreme = setup.state === "EXTREME";
-  const cardBorderClass = isExtreme ? "card-extreme" : (isBull ? "card-bullish" : "card-bearish");
-  const dirTagClass = isBull ? "bullish" : "bearish";
   const dirIcon = isBull ? "▲ LONG" : "▼ SHORT";
+  const dirTagClass = isBull ? "bullish" : "bearish";
+
+  // State-specific styles and banners
+  let cardStateClass = "card-watch";
+  let stateBannerHtml = "";
+
+  if (state === "EXTREME") {
+    cardStateClass = "card-extreme";
+    stateBannerHtml = `
+      <div class="state-banner extreme-banner">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+        <span>⚡ EXTREME CONFLUENCE · Multi-Timeframe Institutional Confluence</span>
+      </div>
+    `;
+  } else if (state === "ACTIVE") {
+    cardStateClass = "card-active";
+    stateBannerHtml = `
+      <div class="state-banner active-confirmed-banner">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+        <span>✓ ACTIVE SETUP CONFIRMED · Strict Entry & Rejection Criteria Satisfied</span>
+      </div>
+    `;
+  } else if (state === "INVALIDATED") {
+    cardStateClass = "card-invalidated";
+    const invalReason = setup.reason || (setup.is_target_reached ? "Target already reached. Setup expired." : "Structural invalidation triggered");
+    stateBannerHtml = `
+      <div class="state-banner invalidated-banner">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+        <span>✕ SETUP INVALIDATED / EXPIRED · ${invalReason}</span>
+      </div>
+    `;
+  } else {
+    // WATCH is default
+    cardStateClass = "card-watch";
+    stateBannerHtml = `
+      <div class="state-banner waiting-banner">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        <span>⏳ WAITING FOR CONFIRMATION · Pending closed-candle rejection & trigger rule</span>
+      </div>
+    `;
+  }
 
   const checklistsHtml = (setup.checklist || []).map((c) => {
     return `<span class="chk-badge ${c.satisfied ? 'done' : ''}" title="${c.name}: ${c.description}">${c.name} ${c.satisfied ? '✓' : '○'}</span>`;
   }).join("");
 
+  // Target and invalidation display formatting
+  let targetDisplay = setup.target || "--";
+  if (setup.is_target_reached) {
+    targetDisplay = `${targetDisplay} (REACHED)`;
+  }
+
+  // Directional Context (framing as context, not execution instruction)
+  const dirContextLabel = setup.directional_context || `${dirIcon} Bias`;
+
   activeSetupContainer.innerHTML = `
-    <div class="active-setup-card ${cardBorderClass}" id="activeSetupCard">
+    <div class="active-setup-card ${cardStateClass}" id="activeSetupCard">
+      ${stateBannerHtml}
       <div class="card-top-row">
         <div class="card-identity">
-          <span class="direction-tag ${dirTagClass}">${dirIcon}</span>
+          <span class="directional-context-tag ${dirTagClass}">${dirContextLabel}</span>
           <span class="setup-title">${setup.name} (${setup.timeframe})</span>
           <span class="quality-badge">${setup.quality}</span>
-          <span class="setup-pill ${setup.state.toLowerCase()}" style="font-size: 9px; padding: 1px 5px;">${setup.state}</span>
+          <span class="setup-pill ${state.toLowerCase()}" style="font-size: 9px; padding: 1px 6px;">${state}</span>
         </div>
         <button class="btn-dismiss" id="btnDismissCard" title="Acknowledge & dismiss setup card view (retains surveillance in background)">
           ✕ Dismiss
@@ -370,23 +440,23 @@ function renderActiveSetupCard(analysis) {
 
       <div class="card-metrics-grid">
         <div class="metric-item">
-          <span class="metric-lbl">Zone / Entry</span>
+          <span class="metric-lbl">Zone / Entry POI</span>
           <span class="metric-val">$${setup.zone_str}</span>
         </div>
         <div class="metric-item">
-          <span class="metric-lbl">Invalidation</span>
+          <span class="metric-lbl">Invalidation (SL)</span>
           <span class="metric-val" style="color: var(--red-bear);">${setup.invalidation}</span>
         </div>
         <div class="metric-item">
           <span class="metric-lbl">Target (TP)</span>
-          <span class="metric-val" style="color: var(--teal-bull);">${setup.target}</span>
+          <span class="metric-val" style="color: ${setup.is_target_reached ? 'var(--text-muted)' : 'var(--teal-bull)'};">${targetDisplay}</span>
         </div>
         <div class="metric-item">
           <span class="metric-lbl">Reward / Risk</span>
           <span class="metric-val">${setup.reward_risk}</span>
         </div>
         <div class="metric-item">
-          <span class="metric-lbl">Distance</span>
+          <span class="metric-lbl">Distance to POI</span>
           <span class="metric-val">${setup.distance >= 0 ? '+' : ''}${setup.distance.toFixed(2)} (${setup.distance_pct.toFixed(2)}%)</span>
         </div>
       </div>
@@ -394,7 +464,7 @@ function renderActiveSetupCard(analysis) {
       <div class="card-bottom-row">
         <div class="card-checklist-badges">${checklistsHtml}</div>
         <div class="card-reason" style="font-size: 10px; color: var(--text-dim);">
-          ${setup.reason || "Real-time SMC trigger criteria active"}
+          ${setup.reason || (state === "WATCH" ? "Awaiting price reaction & closed-candle confirmation inside POI" : "Real-time SMC trigger criteria active")}
         </div>
       </div>
     </div>
@@ -452,6 +522,8 @@ function renderChartData(analysis) {
     });
 }
 
+let placedPriceLabels = [];
+
 function clearOverlayLines() {
   activeLines.forEach((line) => {
     try {
@@ -459,80 +531,154 @@ function clearOverlayLines() {
     } catch (e) {}
   });
   activeLines = [];
+  placedPriceLabels = [];
+}
+
+// Collision-Aware Price Line Creator:
+// Prevents overlapping price axis scale badges when lines are within 1.20 USD of each other
+function addCollisionAwarePriceLine(opts) {
+  const COLLISION_THRESHOLD = 1.20; // 1.20 USD minimum separation on price axis
+  let showAxis = opts.axisLabelVisible !== false;
+  if (showAxis && opts.price !== undefined && opts.price !== null) {
+    const collides = placedPriceLabels.some((p) => Math.abs(p - opts.price) < COLLISION_THRESHOLD);
+    if (collides) {
+      showAxis = false;
+    } else {
+      placedPriceLabels.push(opts.price);
+    }
+  }
+  const line = candleSeries.createPriceLine({
+    ...opts,
+    axisLabelVisible: showAxis,
+  });
+  activeLines.push(line);
+  return line;
 }
 
 function drawSMCLevels(analysis) {
+  if (!analysis) return;
+  placedPriceLabels = [];
+
+  const setup = analysis.terminal_state?.active_setup;
+
+  // -------------------------------------------------------------------------
+  // Priority 1: Focus Setup Mode POI, Target & Invalidation (Highest Priority)
+  // -------------------------------------------------------------------------
+  if (focusSetupMode && setup && setup.state !== "IDLE") {
+    const isBull = setup.direction === "bullish";
+    const setupColor = isBull ? "#00b49f" : "#f97316";
+
+    // Setup Target (TP)
+    if (setup.target_price) {
+      addCollisionAwarePriceLine({
+        price: setup.target_price,
+        color: "#00b49f",
+        lineWidth: 2,
+        lineStyle: LightweightCharts.LineStyle.Dashed,
+        axisLabelVisible: true,
+        title: `★ FOCUS TARGET (TP): $${setup.target_price.toFixed(2)}`,
+      });
+    }
+
+    // Setup Invalidation (SL)
+    if (setup.invalidation_price) {
+      addCollisionAwarePriceLine({
+        price: setup.invalidation_price,
+        color: "#f23645",
+        lineWidth: 2,
+        lineStyle: LightweightCharts.LineStyle.Dashed,
+        axisLabelVisible: true,
+        title: `★ FOCUS INVALIDATION (SL): $${setup.invalidation_price.toFixed(2)}`,
+      });
+    }
+  }
+
+  // -------------------------------------------------------------------------
   // 1. Liquidity Levels (PDH, PDL, PWH, PWL)
+  // -------------------------------------------------------------------------
   if (layerToggles.liquidity) {
     const liqs = analysis.liquidity_levels || [];
     liqs.forEach((l) => {
+      const isFaded = focusSetupMode;
       if (l.type === "PDH" || l.type === "PDL") {
-        const line = candleSeries.createPriceLine({
+        addCollisionAwarePriceLine({
           price: l.price,
-          color: l.type === "PDH" ? "#29b6f6" : "#0288d1",
+          color: isFaded ? "rgba(41, 182, 246, 0.4)" : (l.type === "PDH" ? "#29b6f6" : "#0288d1"),
           lineWidth: 1,
           lineStyle: LightweightCharts.LineStyle.Dashed,
-          axisLabelVisible: true,
-          title: `${l.type} (${l.swept ? "SWEPT" : "ACTIVE"})`,
+          axisLabelVisible: !isFaded,
+          title: `${l.type} ($${l.price.toFixed(2)}) [${l.swept ? "SWEPT" : "ACTIVE"}]`,
         });
-        activeLines.push(line);
       } else if (l.type === "PWH" || l.type === "PWL") {
-        const line = candleSeries.createPriceLine({
+        addCollisionAwarePriceLine({
           price: l.price,
-          color: "#26c6da",
+          color: isFaded ? "rgba(38, 198, 218, 0.3)" : "#26c6da",
           lineWidth: 1,
           lineStyle: LightweightCharts.LineStyle.Dotted,
-          axisLabelVisible: true,
-          title: `${l.type}`,
+          axisLabelVisible: !isFaded,
+          title: `${l.type} ($${l.price.toFixed(2)})`,
         });
-        activeLines.push(line);
       }
     });
   }
 
+  // -------------------------------------------------------------------------
   // 2. Higher Timeframe FVGs (1D & 4H)
+  // -------------------------------------------------------------------------
   if (layerToggles.htfFvg) {
     const htfFvgs = [...(analysis.daily_fvgs || []), ...(analysis.h4_fvgs || [])];
     htfFvgs.forEach((f) => {
       if (!f.mitigated && !f.inverted) {
         const isBullish = f.direction === "bullish";
-        // User rule: Peacock green for bullish 4H/1D FVG, orange for bearish 4H/1D FVG
-        const fvgColor = isBullish ? "#00b49f" : "#f97316";
-        const boundColor = isBullish ? "rgba(0, 180, 159, 0.45)" : "rgba(249, 115, 22, 0.45)";
+        const isFocusPOI = focusSetupMode && setup && Math.abs(setup.distance) < 50 && f.timeframe === setup.timeframe;
+        
+        let fvgColor = isBullish ? "#00b49f" : "#f97316";
+        let boundColor = isBullish ? "rgba(0, 180, 159, 0.45)" : "rgba(249, 115, 22, 0.45)";
+        let lineWidth = isFocusPOI ? 3 : 2;
+
+        if (focusSetupMode && !isFocusPOI) {
+          fvgColor = isBullish ? "rgba(0, 180, 159, 0.25)" : "rgba(249, 115, 22, 0.25)";
+          boundColor = "rgba(100, 116, 139, 0.15)";
+          lineWidth = 1;
+        }
+
         const dirLabel = isBullish ? "Bullish" : "Bearish";
+        const prefix = isFocusPOI ? "★ FOCUS POI: " : "";
 
         // 50% Midpoint POI line
-        const midLine = candleSeries.createPriceLine({
+        addCollisionAwarePriceLine({
           price: f.midpoint,
           color: fvgColor,
-          lineWidth: 2,
-          lineStyle: LightweightCharts.LineStyle.SparseDotted,
-          axisLabelVisible: true,
-          title: `${f.timeframe} ${dirLabel} FVG 50%`,
+          lineWidth: lineWidth,
+          lineStyle: isFocusPOI ? LightweightCharts.LineStyle.Solid : LightweightCharts.LineStyle.SparseDotted,
+          axisLabelVisible: !focusSetupMode || isFocusPOI,
+          title: `${prefix}${f.timeframe} ${dirLabel} FVG 50% ($${f.bottom.toFixed(2)} - $${f.top.toFixed(2)})`,
         });
-        activeLines.push(midLine);
 
         // Boundary lines
-        const topBound = candleSeries.createPriceLine({
+        addCollisionAwarePriceLine({
           price: f.top,
           color: boundColor,
           lineWidth: 1,
           lineStyle: LightweightCharts.LineStyle.Dotted,
           axisLabelVisible: false,
+          title: `${f.timeframe} Top: $${f.top.toFixed(2)}`,
         });
-        const botBound = candleSeries.createPriceLine({
+        addCollisionAwarePriceLine({
           price: f.bottom,
           color: boundColor,
           lineWidth: 1,
           lineStyle: LightweightCharts.LineStyle.Dotted,
           axisLabelVisible: false,
+          title: `${f.timeframe} Bot: $${f.bottom.toFixed(2)}`,
         });
-        activeLines.push(topBound, botBound);
       }
     });
   }
 
+  // -------------------------------------------------------------------------
   // 3. Current Timeframe FVGs (Controlled by Current TF FVGs toggle)
+  // -------------------------------------------------------------------------
   if (layerToggles.ltfFvg) {
     if (currentTf === "1H") {
       // 1H FVGs ONLY appear on 1H timeframe: Lighter mint / peach tint
@@ -540,35 +686,39 @@ function drawSMCLevels(analysis) {
       h1List.slice(-4).forEach((f) => {
         if (!f.mitigated && !f.inverted) {
           const isBullish = f.direction === "bullish";
-          const fvgColor = isBullish ? "#5eead4" : "#fdba74";
-          const boundColor = isBullish ? "rgba(94, 234, 212, 0.35)" : "rgba(253, 186, 116, 0.35)";
+          let fvgColor = isBullish ? "#5eead4" : "#fdba74";
+          let boundColor = isBullish ? "rgba(94, 234, 212, 0.35)" : "rgba(253, 186, 116, 0.35)";
+
+          if (focusSetupMode) {
+            fvgColor = isBullish ? "rgba(94, 234, 212, 0.2)" : "rgba(253, 186, 116, 0.2)";
+            boundColor = "rgba(100, 116, 139, 0.12)";
+          }
+
           const dirLabel = isBullish ? "Bullish" : "Bearish";
 
-          const midLine = candleSeries.createPriceLine({
+          addCollisionAwarePriceLine({
             price: f.midpoint,
             color: fvgColor,
             lineWidth: 1,
             lineStyle: LightweightCharts.LineStyle.Dotted,
-            axisLabelVisible: true,
-            title: `1H ${dirLabel} FVG 50%`,
+            axisLabelVisible: !focusSetupMode,
+            title: `1H ${dirLabel} FVG 50% ($${f.bottom.toFixed(2)} - $${f.top.toFixed(2)})`,
           });
-          activeLines.push(midLine);
 
-          const topBound = candleSeries.createPriceLine({
+          addCollisionAwarePriceLine({
             price: f.top,
             color: boundColor,
             lineWidth: 1,
             lineStyle: LightweightCharts.LineStyle.Dotted,
             axisLabelVisible: false,
           });
-          const botBound = candleSeries.createPriceLine({
+          addCollisionAwarePriceLine({
             price: f.bottom,
             color: boundColor,
             lineWidth: 1,
             lineStyle: LightweightCharts.LineStyle.Dotted,
             axisLabelVisible: false,
           });
-          activeLines.push(topBound, botBound);
         }
       });
     } else if (currentTf !== "1D" && currentTf !== "4H") {
@@ -576,88 +726,96 @@ function drawSMCLevels(analysis) {
       (analysis.timeframe_fvgs || []).slice(-4).forEach((f) => {
         if (!f.mitigated && !f.inverted) {
           const isBullish = f.direction === "bullish";
-          const fvgColor = isBullish ? "#29b6f6" : "#e91e63";
-          const boundColor = isBullish ? "rgba(41, 182, 246, 0.35)" : "rgba(233, 30, 99, 0.35)";
+          let fvgColor = isBullish ? "#29b6f6" : "#e91e63";
+          let boundColor = isBullish ? "rgba(41, 182, 246, 0.35)" : "rgba(233, 30, 99, 0.35)";
+
+          if (focusSetupMode) {
+            fvgColor = isBullish ? "rgba(41, 182, 246, 0.2)" : "rgba(233, 30, 99, 0.2)";
+            boundColor = "rgba(100, 116, 139, 0.12)";
+          }
+
           const dirLabel = isBullish ? "Bullish" : "Bearish";
 
-          const midLine = candleSeries.createPriceLine({
+          addCollisionAwarePriceLine({
             price: f.midpoint,
             color: fvgColor,
             lineWidth: 1,
             lineStyle: LightweightCharts.LineStyle.Dotted,
-            axisLabelVisible: true,
-            title: `${f.timeframe} ${dirLabel} FVG 50%`,
+            axisLabelVisible: !focusSetupMode,
+            title: `${f.timeframe} ${dirLabel} FVG 50% ($${f.bottom.toFixed(2)} - $${f.top.toFixed(2)})`,
           });
-          activeLines.push(midLine);
 
-          const topBound = candleSeries.createPriceLine({
+          addCollisionAwarePriceLine({
             price: f.top,
             color: boundColor,
             lineWidth: 1,
             lineStyle: LightweightCharts.LineStyle.Dotted,
             axisLabelVisible: false,
           });
-          const botBound = candleSeries.createPriceLine({
+          addCollisionAwarePriceLine({
             price: f.bottom,
             color: boundColor,
             lineWidth: 1,
             lineStyle: LightweightCharts.LineStyle.Dotted,
             axisLabelVisible: false,
           });
-          activeLines.push(topBound, botBound);
         }
       });
     }
   }
 
+  // -------------------------------------------------------------------------
   // 4. Order Blocks
+  // -------------------------------------------------------------------------
   if (layerToggles.orderBlocks) {
     const obs = analysis.order_blocks || [];
     obs.slice(-4).forEach((ob) => {
       if (!ob.mitigated) {
-        const line = candleSeries.createPriceLine({
+        const isFaded = focusSetupMode;
+        addCollisionAwarePriceLine({
           price: ob.midpoint,
-          color: ob.direction === "bullish" ? "#26a69a" : "#ab47bc",
+          color: isFaded ? "rgba(38, 166, 154, 0.25)" : (ob.direction === "bullish" ? "#26a69a" : "#ab47bc"),
           lineWidth: 1,
           lineStyle: LightweightCharts.LineStyle.Dashed,
-          axisLabelVisible: true,
-          title: `${ob.timeframe} ${ob.direction.toUpperCase()} OB (50%)`,
+          axisLabelVisible: !isFaded,
+          title: `${ob.timeframe} ${ob.direction.toUpperCase()} OB 50% ($${ob.bottom.toFixed(2)} - $${ob.top.toFixed(2)})`,
         });
-        activeLines.push(line);
       }
     });
   }
 
+  // -------------------------------------------------------------------------
   // 5. Psychological 20s and 80s Levels
-  if (layerToggles.psych) {
+  // -------------------------------------------------------------------------
+  if (layerToggles.psych && !focusSetupMode) {
     const psychs = analysis.psychological_levels || [];
     psychs.slice(0, 3).forEach((p) => {
-      const line = candleSeries.createPriceLine({
+      addCollisionAwarePriceLine({
         price: p.price,
         color: "#d97706",
         lineWidth: 1,
         lineStyle: LightweightCharts.LineStyle.Dotted,
         axisLabelVisible: true,
-        title: `Round ${p.level_type} ($${p.price})`,
+        title: `Round ${p.level_type} ($${p.price.toFixed(2)})`,
       });
-      activeLines.push(line);
     });
   }
 
+  // -------------------------------------------------------------------------
   // 6. Trendlines
-  if (layerToggles.trendlines) {
+  // -------------------------------------------------------------------------
+  if (layerToggles.trendlines && !focusSetupMode) {
     const tls = analysis.trendlines || [];
     tls.forEach((tl) => {
       if (tl.current_projected_price) {
-        const line = candleSeries.createPriceLine({
+        addCollisionAwarePriceLine({
           price: tl.current_projected_price,
           color: tl.direction === "resistance" ? "#ef5350" : "#26a69a",
           lineWidth: 1,
           lineStyle: LightweightCharts.LineStyle.LargeDashed,
           axisLabelVisible: true,
-          title: `${tl.timeframe} TL (${tl.touch_count}T)`,
+          title: `${tl.timeframe} TL (${tl.touch_count}T: $${tl.current_projected_price.toFixed(2)})`,
         });
-        activeLines.push(line);
       }
     });
   }
@@ -695,12 +853,85 @@ function drawChartMarkers(analysis) {
 // --------------------------------------------------------------------------
 // 6. Render Watchlist & Alerts Drawer Panes
 // --------------------------------------------------------------------------
-async function renderWatchlist(analysis) {
+function updateAlertCounters(analysis, status) {
+  if (!analysis) return;
+  const tState = analysis.terminal_state || {};
+  const watchlist = analysis.watchlist || [];
+  const alerts = analysis.active_alerts || [];
+
+  // 1. ACTIVE setups count (Strictly confirmed trade setups)
+  let activeCount = 0;
+  if (tState.setup_state === "ACTIVE" || tState.setup_state === "EXTREME") {
+    activeCount += 1;
+  }
+  watchlist.forEach((w) => {
+    if (w.state === "CHECKLIST REVIEW" || w.state === "ACTIVE") {
+      if (!tState.active_setup || w.id !== tState.active_setup.id) {
+        activeCount += 1;
+      }
+    }
+  });
+
+  // 2. WATCH setups count (Levels under surveillance)
+  let watchCount = 0;
+  if (tState.setup_state === "WATCH") {
+    watchCount += 1;
+  }
+  watchlist.forEach((w) => {
+    if (["APPROACHING", "AT KEY LEVEL", "REACTION DEVELOPING", "SETUP TO INSPECT"].includes(w.state)) {
+      if (!tState.active_setup || w.id !== tState.active_setup.id) {
+        watchCount += 1;
+      }
+    }
+  });
+
+  // 3. Risk / Data Feed events count
+  let riskCount = 0;
+  if (tState.risk_state === "CAUTION" || tState.risk_state === "CRITICAL") {
+    riskCount += 1;
+  }
+  if (status && status.data_health && status.data_health !== "HEALTHY") {
+    riskCount += 1;
+  }
+  alerts.forEach((a) => {
+    if (!a.acknowledged && (a.category === "risk" || a.category === "opposing_bias" || a.category === "data_feed")) {
+      riskCount += 1;
+    }
+  });
+
+  // Keep critical risk/feed warning visible even when sidebar is collapsed
+  if (tState.risk_state === "CRITICAL" || (status && status.data_health === "STALE")) {
+    const reason = tState.risk_reasons?.[0] || "CRITICAL RISK: Real-time surveillance flagged structural or feed anomaly";
+    showWarning(reason);
+  }
+
+  // Update Rail Micro-Badges
+  if (badgeActiveCount) {
+    badgeActiveCount.textContent = activeCount;
+    badgeActiveCount.style.display = activeCount > 0 ? "inline-flex" : "none";
+  }
+  if (badgeWatchCount) {
+    badgeWatchCount.textContent = watchCount;
+    badgeWatchCount.style.display = watchCount > 0 ? "inline-flex" : "none";
+  }
+  if (badgeRiskCount) {
+    badgeRiskCount.textContent = riskCount > 0 ? (riskCount > 9 ? "!" : riskCount) : "!";
+    badgeRiskCount.style.display = riskCount > 0 ? "inline-flex" : "none";
+  }
+
+  // Update Alert Pane Header Category Pills
+  if (alertPaneActiveCount) alertPaneActiveCount.textContent = activeCount;
+  if (alertPaneWatchCount) alertPaneWatchCount.textContent = watchCount;
+  if (alertPaneRiskCount) alertPaneRiskCount.textContent = riskCount;
+}
+
+async function renderWatchlist(analysis, status) {
   if (!analysis) return;
 
   let watchlist = analysis.watchlist || [];
   let alerts = analysis.active_alerts || [];
 
+  updateAlertCounters(analysis, status);
   renderAlerts(alerts);
 
   const allCount = watchlist.length;
@@ -764,30 +995,44 @@ async function renderWatchlist(analysis) {
 }
 
 function renderAlerts(alerts) {
-  const unacked = alerts.filter((a) => !a.acknowledged);
-  if (railAlertBadge) {
-    if (unacked.length > 0) {
-      railAlertBadge.textContent = unacked.length;
-      railAlertBadge.style.display = "flex";
-    } else {
-      railAlertBadge.style.display = "none";
+  // Deduplicate unacknowledged alerts to avoid spam
+  const unacked = (alerts || []).filter((a) => !a.acknowledged);
+  const seenKeys = new Set();
+  const dedupedAlerts = [];
+
+  unacked.forEach((a) => {
+    const key = `${a.category || 'gen'}_${a.message}`;
+    if (!seenKeys.has(key)) {
+      seenKeys.add(key);
+      dedupedAlerts.push(a);
     }
-  }
+  });
 
   if (!alertsDrawerArea) return;
   alertsDrawerArea.innerHTML = "";
 
-  if (!alerts.length) {
+  if (!dedupedAlerts.length) {
     alertsDrawerArea.innerHTML = `
-      <div class="empty-state">No unacknowledged alerts. Active transitions will appear here.</div>
+      <div class="empty-state">No unacknowledged alerts. Active transitions and risk events will appear here.</div>
     `;
     return;
   }
 
-  alerts.forEach((alt) => {
+  dedupedAlerts.forEach((alt) => {
     const div = document.createElement("div");
+    let borderColor = "var(--border)";
+    let badgeColor = "var(--gold)";
+
+    if (alt.category === "setup") {
+      borderColor = "rgba(0, 180, 159, 0.4)";
+      badgeColor = "var(--teal-bull)";
+    } else if (alt.category === "risk" || alt.category === "opposing_bias") {
+      borderColor = "rgba(242, 54, 69, 0.4)";
+      badgeColor = "var(--red-bear)";
+    }
+
     div.style.background = "var(--bg-card)";
-    div.style.border = "1px solid var(--border)";
+    div.style.border = `1px solid ${borderColor}`;
     div.style.borderRadius = "4px";
     div.style.padding = "8px";
     div.style.marginBottom = "6px";
@@ -797,8 +1042,8 @@ function renderAlerts(alerts) {
 
     div.innerHTML = `
       <div>
-        <div style="font-weight: 700; font-size: 11px; color: var(--gold);">${alt.message}</div>
-        <div style="font-size: 10px; color: var(--text-dim); margin-top: 2px;">Time: ${alt.ist_time || "Recent"} IST</div>
+        <div style="font-weight: 700; font-size: 11px; color: ${badgeColor};">${alt.message}</div>
+        <div style="font-size: 10px; color: var(--text-dim); margin-top: 2px;">Time: ${alt.ist_time || "Recent"} IST · ${alt.timeframe || currentTf}</div>
       </div>
       <button class="btn-tool" style="font-size: 10px; padding: 2px 6px;" onclick="acknowledgeAlert('${alt.id}')">Dismiss</button>
     `;
@@ -1258,6 +1503,7 @@ function connectWebSocket() {
         headerPrice.textContent = msg.price.toFixed(2);
       } else if (eventType === "candle_update") {
         if (msg.candle) {
+          latestCandle = msg.candle;
           headerPrice.textContent = msg.candle.close.toFixed(2);
           lastUpdateTs = Date.now() / 1000;
           if (msg.timeframe === currentTf) {
@@ -1276,7 +1522,7 @@ function connectWebSocket() {
         renderActiveSetupCard(msg.analysis);
         clearOverlayLines();
         drawSMCLevels(msg.analysis);
-        renderWatchlist(msg.analysis);
+        renderWatchlist(msg.analysis, null);
         renderDrawerData(msg.analysis);
       } else if (eventType === "smc_sync") {
         if (msg.timeframe === currentTf) {
@@ -1285,9 +1531,10 @@ function connectWebSocket() {
           renderActiveSetupCard(msg.analysis);
           clearOverlayLines();
           drawSMCLevels(msg.analysis);
-          renderWatchlist(msg.analysis);
+          renderWatchlist(msg.analysis, msg.status);
           renderDrawerData(msg.analysis);
           if (msg.candles && msg.candles.length) {
+            latestCandle = msg.candles[msg.candles.length - 1];
             const chartCandles = msg.candles.map((c) => ({
               time: toLocalChartTime(c.time),
               open: c.open,
@@ -1323,7 +1570,44 @@ function connectWebSocket() {
 }
 
 // --------------------------------------------------------------------------
-// 14. Event Listeners & Watchlist Filter Setup
+// 14. Focus Setup Controls Handler
+// --------------------------------------------------------------------------
+function setupFocusSetupControls() {
+  function setFocusSetup(val) {
+    focusSetupMode = val;
+    if (btnFocusSetup) {
+      btnFocusSetup.classList.toggle("active", focusSetupMode);
+    }
+    if (focusSetupBtnText) {
+      focusSetupBtnText.textContent = focusSetupMode ? "Focus: ON" : "Focus: OFF";
+    }
+    if (togFocusSetup) {
+      togFocusSetup.checked = focusSetupMode;
+    }
+    if (currentAnalysis) {
+      clearOverlayLines();
+      drawSMCLevels(currentAnalysis);
+      if (layerToggles.swings) {
+        drawChartMarkers(currentAnalysis);
+      }
+    }
+  }
+
+  if (btnFocusSetup) {
+    btnFocusSetup.addEventListener("click", () => {
+      setFocusSetup(!focusSetupMode);
+    });
+  }
+
+  if (togFocusSetup) {
+    togFocusSetup.addEventListener("change", (e) => {
+      setFocusSetup(e.target.checked);
+    });
+  }
+}
+
+// --------------------------------------------------------------------------
+// 15. Event Listeners & Watchlist Filter Setup
 // --------------------------------------------------------------------------
 function setupWatchlistFilters() {
   document.querySelectorAll(".filter-btn").forEach((btn) => {
@@ -1383,6 +1667,7 @@ document.addEventListener("DOMContentLoaded", () => {
   setupOverlaysMenu();
   setupDetailsToggle();
   setupFullscreenToggle();
+  setupFocusSetupControls();
   setupWatchlistFilters();
   setupEventListeners();
   loadSMCData(currentTf);

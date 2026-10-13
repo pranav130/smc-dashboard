@@ -35,6 +35,7 @@ from backend.smc.liquidity import (
 from backend.smc.trendlines import calculate_trendlines
 from backend.smc.psychological import calculate_psychological_levels
 from backend.smc.ranking import rank_key_levels
+from backend.smc.activation import generate_watchlist, global_alert_store
 
 
 class SMCEngine:
@@ -47,7 +48,8 @@ class SMCEngine:
         self,
         candles_by_tf: Dict[str, List[Candle]],
         selected_timeframe: str = "1H",
-        config: Optional[AnalysisConfig] = None
+        config: Optional[AnalysisConfig] = None,
+        is_stale: bool = False
     ) -> Dict[str, Any]:
         """
         Perform complete multi-timeframe SMC analysis for the dashboard.
@@ -205,6 +207,27 @@ class SMCEngine:
             warnings=opposing_warnings
         )
 
+        # 11. Generate Key-Level Activation & Trade-Readiness Watchlist
+        watchlist_entries, active_alerts = generate_watchlist(
+            current_price=current_price,
+            current_candles=current_candles,
+            daily_fvgs=daily_fvgs,
+            h4_fvgs=h4_fvgs,
+            order_blocks=all_order_blocks,
+            liquidity_levels=all_liquidity,
+            trendlines=trendlines,
+            displacement_candles=displacement_candles,
+            current_fvgs=curr_fvgs,
+            opposing_warnings=opposing_warnings,
+            config=config,
+            is_stale=is_stale
+        )
+
+        # Count active levels by state
+        state_counts = {}
+        for entry in watchlist_entries:
+            state_counts[entry.state] = state_counts.get(entry.state, 0) + 1
+
         return {
             "timeframe": tf,
             "current_price": current_price,
@@ -228,5 +251,8 @@ class SMCEngine:
             "trendlines": [t.model_dump() for t in trendlines],
             "psychological_levels": [p.model_dump() for p in psych_levels],
             "key_levels_summary": [r.model_dump() for r in ranked_levels],
+            "watchlist": [w.model_dump() for w in watchlist_entries],
+            "active_alerts": [a.model_dump() for a in active_alerts],
+            "state_counts": state_counts,
             "opposing_warnings": opposing_warnings
         }

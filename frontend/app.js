@@ -67,6 +67,15 @@ const ovNearestAbove = document.getElementById("ovNearestAbove");
 const ovNearestBelow = document.getElementById("ovNearestBelow");
 const ovOteStatus = document.getElementById("ovOteStatus");
 
+// Watchlist & Alerts elements
+const watchlistAlertBadge = document.getElementById("watchlistAlertBadge");
+const alertsDrawerArea = document.getElementById("alertsDrawerArea");
+const watchlistCardsContainer = document.getElementById("watchlistCardsContainer");
+const filterAllCount = document.getElementById("filterAllCount");
+const filterActiveCount = document.getElementById("filterActiveCount");
+const filterSetupsCount = document.getElementById("filterSetupsCount");
+let watchlistFilter = "all";
+
 // 1. Initialize Lightweight Chart
 function initChart() {
   const container = document.getElementById("chart");
@@ -154,6 +163,7 @@ async function loadSMCData(timeframe) {
       try { updateStatusPanel(data.status); } catch (e) { console.error("updateStatusPanel error:", e); }
       try { renderMarketOverview(data.analysis); } catch (e) { console.error("renderMarketOverview error:", e); }
       try { renderChartData(data.analysis); } catch (e) { console.error("renderChartData error:", e); }
+      try { renderWatchlist(data.analysis); } catch (e) { console.error("renderWatchlist error:", e); }
       try { renderSidebarData(data.analysis); } catch (e) { console.error("renderSidebarData error:", e); }
     }
   } catch (err) {
@@ -423,6 +433,217 @@ function drawChartMarkers(analysis) {
 
   markers.sort((a, b) => a.time - b.time);
   candleSeries.setMarkers(markers);
+}
+
+// 4b. Render Key-Level Activation & Trade-Readiness Watchlist
+function renderWatchlist(analysis) {
+  if (!analysis) return;
+
+  const watchlist = analysis.watchlist || [];
+  const alerts = analysis.active_alerts || [];
+
+  renderAlerts(alerts);
+
+  // Update filter counts
+  const allCount = watchlist.length;
+  const activeCount = watchlist.filter(
+    (w) => ["APPROACHING", "AT KEY LEVEL", "REACTION DEVELOPING", "SETUP TO INSPECT", "CHECKLIST REVIEW"].includes(w.state)
+  ).length;
+  const setupsCount = watchlist.filter(
+    (w) => ["SETUP TO INSPECT", "CHECKLIST REVIEW"].includes(w.state)
+  ).length;
+
+  if (filterAllCount) filterAllCount.textContent = allCount;
+  if (filterActiveCount) filterActiveCount.textContent = activeCount;
+  if (filterSetupsCount) filterSetupsCount.textContent = setupsCount;
+
+  // Filter entries
+  let filtered = watchlist;
+  if (watchlistFilter === "active") {
+    filtered = watchlist.filter((w) =>
+      ["APPROACHING", "AT KEY LEVEL", "REACTION DEVELOPING", "SETUP TO INSPECT", "CHECKLIST REVIEW"].includes(w.state)
+    );
+  } else if (watchlistFilter === "setups") {
+    filtered = watchlist.filter((w) =>
+      ["SETUP TO INSPECT", "CHECKLIST REVIEW"].includes(w.state)
+    );
+  }
+
+  if (!watchlistCardsContainer) return;
+  watchlistCardsContainer.innerHTML = "";
+
+  if (!filtered.length) {
+    watchlistCardsContainer.innerHTML = `
+      <div style="color: var(--text-dim); font-size: 11px; text-align: center; padding: 20px; background: rgba(21, 25, 34, 0.4); border-radius: 6px; border: 1px dashed var(--border);">
+        No key levels currently in "${watchlistFilter.toUpperCase()}" filter.
+      </div>
+    `;
+    return;
+  }
+
+  filtered.forEach((entry) => {
+    const card = document.createElement("div");
+    let cardClass = "surveillance-card";
+    if (entry.state === "CHECKLIST REVIEW") cardClass += " active-setup";
+    else if (entry.state === "SETUP TO INSPECT") cardClass += " inspect-setup";
+    card.className = cardClass;
+
+    const stateClass = `state-${entry.state.replace(/\s+/g, "-").replace("/", "-")}`;
+    const distSign = entry.distance >= 0 ? `+${entry.distance.toFixed(2)}` : entry.distance.toFixed(2);
+    const rangeSpan = (entry.top && entry.bottom) ? `$${entry.bottom.toFixed(2)} - $${entry.top.toFixed(2)}` : `$${entry.price.toFixed(2)}`;
+
+    // Build checklist rows
+    let checklistHtml = "";
+    let missingItems = [];
+    if (entry.checklist && entry.checklist.length) {
+      entry.checklist.forEach((item) => {
+        const iconClass = item.satisfied ? "passed" : (item.id === "clean_path" && !item.satisfied ? "failed" : "pending");
+        const iconSymbol = item.satisfied ? "✓" : (item.id === "clean_path" && !item.satisfied ? "✗" : "○");
+        if (!item.satisfied) {
+          missingItems.push(item.name.replace(/^[0-9.]+\s*/, ""));
+        }
+        checklistHtml += `
+          <div class="checklist-item-row">
+            <span class="check-icon ${iconClass}">${iconSymbol}</span>
+            <div class="check-name">
+              <span>${item.name}</span>
+              <div class="check-detail">${item.evidence}</div>
+            </div>
+          </div>
+        `;
+      });
+    }
+
+    let missingHtml = "";
+    if (missingItems.length && ["AT KEY LEVEL", "REACTION DEVELOPING", "SETUP TO INSPECT"].includes(entry.state)) {
+      missingHtml = `
+        <div class="missing-callout">
+          <strong>Missing for Setup:</strong> ${missingItems.join(" · ")}
+        </div>
+      `;
+    }
+
+    let opposingHtml = "";
+    if (entry.opposing_zone_warning) {
+      opposingHtml = `
+        <div style="margin-top: 6px; padding: 4px 8px; background: rgba(239, 83, 80, 0.1); border-left: 2px solid var(--red); font-size: 10px; color: #ff8a80; border-radius: 0 3px 3px 0;">
+          ⚠ ${entry.opposing_zone_warning}
+        </div>
+      `;
+    }
+
+    card.innerHTML = `
+      <div class="card-top">
+        <div class="level-meta-left">
+          <span class="type-tag ${entry.type.includes('FVG') ? 'type-fvg' : entry.type.includes('OB') ? 'type-ob' : 'type-liq'}">${entry.timeframe}</span>
+          <span class="level-name-title">${entry.name}</span>
+        </div>
+        <span class="state-pill ${stateClass}">${entry.state}</span>
+      </div>
+      <div class="card-middle">
+        <div class="level-stat-row">
+          <span>Target Range: <strong style="color: var(--text-main); font-family: var(--font-mono);">${rangeSpan}</strong></span>
+          <span>Dist: <strong style="font-family: var(--font-mono); color: ${Math.abs(entry.distance) < 20 ? '#ffca28' : 'var(--text-main)'};">${distSign} (${entry.distance_pct}%)</strong></span>
+        </div>
+        <div class="state-reason-callout">
+          <strong>Market State Reason:</strong> ${entry.state_reason}
+        </div>
+        ${opposingHtml}
+        <div class="checklist-container">
+          <div class="checklist-title">SMC Strategy Checklist Progress</div>
+          ${checklistHtml}
+        </div>
+        ${missingHtml}
+      </div>
+    `;
+
+    watchlistCardsContainer.appendChild(card);
+  });
+}
+
+function renderAlerts(alerts) {
+  if (!alertsDrawerArea) return;
+  alertsDrawerArea.innerHTML = "";
+
+  const unacked = alerts.filter((a) => !a.acknowledged);
+
+  if (watchlistAlertBadge) {
+    if (unacked.length > 0) {
+      watchlistAlertBadge.style.display = "inline";
+      watchlistAlertBadge.textContent = unacked.length;
+    } else {
+      watchlistAlertBadge.style.display = "none";
+    }
+  }
+
+  if (!unacked.length) return;
+
+  const drawer = document.createElement("div");
+  drawer.className = "alerts-drawer";
+
+  let alertsItemsHtml = "";
+  unacked.slice(0, 3).forEach((alt) => {
+    const stClass = `state-${alt.state.replace(/\s+/g, "-").replace("/", "-")}`;
+    alertsItemsHtml += `
+      <div class="alert-item ${stClass}">
+        <div class="alert-content">
+          <div class="alert-msg">${alt.message}</div>
+          <div class="alert-meta">Detected: ${alt.ist_time || "Now"} ${alt.is_stale_suppressed ? '<span style="color:var(--red);">[Data Stale - Suppressed]</span>' : ""}</div>
+        </div>
+        <button class="btn-ack" onclick="acknowledgeAlert('${alt.id}')">Ack</button>
+      </div>
+    `;
+  });
+
+  drawer.innerHTML = `
+    <div class="alerts-header">
+      <span class="alerts-title">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
+        Attention Alerts (${unacked.length})
+      </span>
+      <button class="btn-dismiss-all" onclick="dismissAllAlerts()">Dismiss All</button>
+    </div>
+    ${alertsItemsHtml}
+  `;
+
+  alertsDrawerArea.appendChild(drawer);
+}
+
+async function acknowledgeAlert(alertId) {
+  try {
+    await fetch(`/api/alerts/acknowledge?alert_id=${encodeURIComponent(alertId)}`, { method: "POST" });
+    if (currentAnalysis) {
+      currentAnalysis.active_alerts = (currentAnalysis.active_alerts || []).filter((a) => a.id !== alertId);
+      renderAlerts(currentAnalysis.active_alerts);
+    }
+  } catch (e) {
+    console.error("Ack alert error:", e);
+  }
+}
+
+async function dismissAllAlerts() {
+  try {
+    await fetch("/api/alerts/acknowledge?dismiss_all=true", { method: "POST" });
+    if (currentAnalysis) {
+      currentAnalysis.active_alerts = [];
+      renderAlerts([]);
+    }
+  } catch (e) {
+    console.error("Dismiss all alerts error:", e);
+  }
+}
+
+function setupWatchlistFilters() {
+  document.querySelectorAll(".watchlist-filters .filter-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".watchlist-filters .filter-btn").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      watchlistFilter = btn.getAttribute("data-filter") || "all";
+      if (currentAnalysis) {
+        renderWatchlist(currentAnalysis);
+      }
+    });
+  });
 }
 
 // 5. Render Sidebar Tables & Panels
@@ -839,6 +1060,7 @@ setInterval(() => {
 // Initialize on DOM ready
 document.addEventListener("DOMContentLoaded", () => {
   initChart();
+  setupWatchlistFilters();
   loadSMCData(currentTf);
   connectWebSocket();
 });

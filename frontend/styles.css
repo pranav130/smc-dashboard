@@ -632,3 +632,348 @@ header {
   font-size: 10px;
   font-weight: 600;
 }
+
+/* ---------------------------------------------------------------------------
+ * Key-Level Activation & Trade-Readiness Watchlist Styles
+ * --------------------------------------------------------------------------- */
+
+.badge-alert-count {
+  background: var(--red);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 10px;
+  margin-left: 4px;
+}
+
+/* Alerts Drawer */
+.alerts-drawer {
+  background: rgba(239, 83, 80, 0.08);
+  border: 1px solid rgba(239, 83, 80, 0.3);
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin-bottom: 12px;
+}
+
+.alerts-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.alerts-title {
+  color: #ff8a80;
+  font-weight: 700;
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.btn-dismiss-all {
+  background: transparent;
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.btn-dismiss-all:hover {
+  color: var(--text-main);
+  border-color: var(--border-light);
+}
+
+.alert-item {
+  background: rgba(21, 25, 34, 0.9);
+  border-left: 3px solid var(--red);
+  padding: 6px 8px;
+  border-radius: 0 4px 4px 0;
+  margin-bottom: 6px;
+  font-size: 11px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.alert-item.state-CHECKLIST-REVIEW {
+  border-left-color: var(--accent-gold);
+}
+
+.alert-item.state-SETUP-TO-INSPECT {
+  border-left-color: var(--blue);
+}
+
+.alert-item.state-REACTION-DEVELOPING {
+  border-left-color: var(--green);
+}
+
+.alert-content {
+  flex: 1;
+}
+
+.alert-msg {
+  color: var(--text-main);
+  font-weight: 600;
+}
+
+.alert-meta {
+  color: var(--text-dim);
+  font-size: 10px;
+  margin-top: 2px;
+}
+
+.btn-ack {
+  background: var(--border);
+  color: var(--text-muted);
+  border: none;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 10px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.btn-ack:hover {
+  background: var(--border-light);
+  color: var(--text-main);
+}
+
+/* Surveillance Filter Chips */
+.watchlist-filters {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+  overflow-x: auto;
+}
+
+.filter-btn {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s;
+}
+
+.filter-btn:hover {
+  color: var(--text-main);
+}
+
+.filter-btn.active {
+  background: var(--border-light);
+  color: var(--accent-gold);
+  border-color: var(--accent-gold);
+}
+
+/* State Badges / Pills */
+.state-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+
+.state-pill.state-CHECKLIST-REVIEW {
+  background: rgba(229, 179, 66, 0.2);
+  color: var(--accent-gold);
+  border: 1px solid rgba(229, 179, 66, 0.5);
+  box-shadow: 0 0 8px rgba(229, 179, 66, 0.2);
+}
+
+.state-pill.state-SETUP-TO-INSPECT {
+  background: rgba(41, 182, 246, 0.2);
+  color: var(--blue);
+  border: 1px solid rgba(41, 182, 246, 0.5);
+}
+
+.state-pill.state-REACTION-DEVELOPING {
+  background: rgba(38, 166, 154, 0.2);
+  color: var(--green);
+  border: 1px solid rgba(38, 166, 154, 0.5);
+}
+
+.state-pill.state-AT-KEY-LEVEL {
+  background: rgba(171, 71, 188, 0.2);
+  color: #ce93d8;
+  border: 1px solid rgba(171, 71, 188, 0.5);
+}
+
+.state-pill.state-APPROACHING {
+  background: rgba(255, 152, 0, 0.2);
+  color: #ffb74d;
+  border: 1px solid rgba(255, 152, 0, 0.5);
+}
+
+.state-pill.state-INACTIVE {
+  background: rgba(84, 93, 104, 0.2);
+  color: var(--text-dim);
+  border: 1px solid rgba(84, 93, 104, 0.4);
+}
+
+.state-pill.state-INVALIDATED {
+  background: rgba(239, 83, 80, 0.15);
+  color: var(--red);
+  border: 1px solid rgba(239, 83, 80, 0.3);
+}
+
+/* Surveillance Level Card */
+.surveillance-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  margin-bottom: 10px;
+  overflow: hidden;
+  transition: border-color 0.15s;
+}
+
+.surveillance-card:hover {
+  border-color: var(--border-light);
+}
+
+.surveillance-card.active-setup {
+  border-color: var(--accent-gold);
+  background: rgba(229, 179, 66, 0.03);
+}
+
+.surveillance-card.inspect-setup {
+  border-color: var(--blue);
+  background: rgba(41, 182, 246, 0.03);
+}
+
+.card-top {
+  padding: 8px 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid rgba(35, 42, 56, 0.4);
+}
+
+.level-meta-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.level-name-title {
+  font-weight: 700;
+  font-size: 12px;
+  color: var(--text-main);
+}
+
+.card-middle {
+  padding: 8px 10px;
+}
+
+.level-stat-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  margin-bottom: 6px;
+}
+
+.state-reason-callout {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.4;
+  margin-bottom: 8px;
+  background: rgba(11, 14, 20, 0.5);
+  padding: 6px 8px;
+  border-radius: 4px;
+}
+
+/* Checklist Tracker */
+.checklist-container {
+  background: #0f131a;
+  border: 1px solid rgba(35, 42, 56, 0.6);
+  border-radius: 4px;
+  padding: 6px 8px;
+  margin-top: 6px;
+}
+
+.checklist-title {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+
+.checklist-item-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: 11px;
+  padding: 3px 0;
+  border-bottom: 1px solid rgba(35, 42, 56, 0.3);
+}
+
+.checklist-item-row:last-child {
+  border-bottom: none;
+}
+
+.check-icon {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  font-weight: 800;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.check-icon.passed {
+  background: rgba(38, 166, 154, 0.2);
+  color: var(--green);
+  border: 1px solid var(--green);
+}
+
+.check-icon.pending {
+  background: rgba(84, 93, 104, 0.2);
+  color: var(--text-dim);
+  border: 1px solid var(--text-dim);
+}
+
+.check-icon.failed {
+  background: rgba(239, 83, 80, 0.2);
+  color: var(--red);
+  border: 1px solid var(--red);
+}
+
+.check-name {
+  font-weight: 500;
+  color: var(--text-main);
+  flex: 1;
+}
+
+.check-detail {
+  font-size: 10px;
+  color: var(--text-dim);
+  margin-top: 1px;
+}
+
+/* Missing Checklist Callout */
+.missing-callout {
+  margin-top: 6px;
+  padding: 4px 8px;
+  background: rgba(255, 152, 0, 0.1);
+  border-left: 2px solid #ff9800;
+  font-size: 10px;
+  color: #ffb74d;
+  border-radius: 0 3px 3px 0;
+}

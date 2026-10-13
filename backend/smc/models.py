@@ -340,3 +340,72 @@ class AnalysisConfig(BaseModel):
 
     # Key levels
     max_levels_display: int = 20
+
+    # Key-Level Activation & Watchlist thresholds (incorporating ATR and zone width)
+    activation_approach_atr_multiplier: float = 1.5   # Threshold for APPROACHING state
+    activation_at_level_atr_multiplier: float = 0.5   # Buffer around zone boundary for AT KEY LEVEL
+    activation_sweep_recency_bars: int = 10           # Recency window for liquidity sweep reaction
+    activation_break_recency_bars: int = 15           # Recency window for trendline breakout setup
+
+
+# ---------------------------------------------------------------------------
+# Key-Level Activation & Trade-Readiness Watchlist
+# ---------------------------------------------------------------------------
+
+ActivationState = Literal[
+    "INACTIVE",
+    "APPROACHING",
+    "AT KEY LEVEL",
+    "REACTION DEVELOPING",
+    "SETUP TO INSPECT",
+    "CHECKLIST REVIEW",
+    "INVALIDATED / PASSED"
+]
+
+
+class ChecklistItem(BaseModel):
+    id: str
+    name: str
+    description: str
+    satisfied: bool = False
+    evidence: str = "Pending"
+    timeframe: Optional[str] = None
+
+
+class WatchlistEntry(BaseModel):
+    level_id: str
+    name: str
+    type: str                             # "HTF FVG", "OrderBlock", "Liquidity", "Support/Resistance"
+    timeframe: str                        # "1D", "4H", "1H", etc.
+    direction: Optional[str] = None       # "bullish", "bearish", None
+    price: float                          # Midpoint or single level price
+    top: Optional[float] = None
+    bottom: Optional[float] = None
+    zone_width: float = 0.0
+    distance: float                       # Signed distance to current price
+    distance_pct: float
+    freshness: str = "Active"             # "unmitigated", "partial_50", "swept", "active"
+    state: ActivationState = "INACTIVE"
+    state_reason: str = ""
+    evidence: List[str] = Field(default_factory=list)
+    checklist: List[ChecklistItem] = Field(default_factory=list)
+    opposing_zone_warning: Optional[str] = None
+    last_event_time: Optional[int] = None
+    last_event_ist: Optional[str] = None
+    is_nearest_above: bool = False
+    is_nearest_below: bool = False
+    score: int = 0
+
+
+class WatchlistAlert(BaseModel):
+    id: str
+    level_id: str
+    level_name: str
+    timeframe: str
+    state: ActivationState
+    message: str
+    evidence: List[str] = Field(default_factory=list)
+    timestamp: int
+    ist_time: Optional[str] = ""
+    acknowledged: bool = False
+    is_stale_suppressed: bool = False

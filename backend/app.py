@@ -148,13 +148,53 @@ async def get_smc_analysis(
         fvg_min_size_atr_multiplier=fvg_min_size_mult,
         bos_min_retracement_pct=bos_min_retrace
     )
-    analysis = smc_engine.analyze_multi_timeframe(candles_by_tf, tf, config)
     status = get_current_status(tf)
+    analysis = smc_engine.analyze_multi_timeframe(candles_by_tf, tf, config, is_stale=status.is_stale)
     return {
         "success": True,
         "status": status.model_dump(),
         "analysis": analysis
     }
+
+@app.get("/api/watchlist")
+async def get_watchlist(timeframe: str = Query("1H")):
+    tf = timeframe.upper()
+    candles_by_tf = {
+        "1D": adapter.get_candles("1D"),
+        "4H": adapter.get_candles("4H"),
+        "1H": adapter.get_candles("1H"),
+        "30M": adapter.get_candles("30M"),
+    }
+    status = get_current_status(tf)
+    analysis = smc_engine.analyze_multi_timeframe(candles_by_tf, tf, is_stale=status.is_stale)
+    return {
+        "success": True,
+        "timeframe": tf,
+        "watchlist": analysis.get("watchlist", []),
+        "active_alerts": analysis.get("active_alerts", []),
+        "state_counts": analysis.get("state_counts", {}),
+        "status": status.model_dump()
+    }
+
+@app.get("/api/alerts")
+async def get_alerts(include_acknowledged: bool = Query(False)):
+    from backend.smc.activation import global_alert_store
+    alerts = global_alert_store.get_alerts(include_acknowledged=include_acknowledged)
+    return {
+        "success": True,
+        "alerts": [a.model_dump() for a in alerts]
+    }
+
+@app.post("/api/alerts/acknowledge")
+async def acknowledge_alert(alert_id: str = Query(None), dismiss_all: bool = Query(False)):
+    from backend.smc.activation import global_alert_store
+    if dismiss_all:
+        global_alert_store.dismiss_all()
+        return {"success": True, "message": "All alerts dismissed"}
+    elif alert_id:
+        res = global_alert_store.acknowledge_alert(alert_id)
+        return {"success": res, "message": f"Alert {alert_id} acknowledged" if res else "Alert not found"}
+    return {"success": False, "message": "No alert_id or dismiss_all specified"}
 
 @app.get("/api/market-state")
 async def get_market_state(timeframe: str = Query("1H")):
@@ -165,11 +205,12 @@ async def get_market_state(timeframe: str = Query("1H")):
         "1H": adapter.get_candles("1H"),
         "30M": adapter.get_candles("30M"),
     }
-    analysis = smc_engine.analyze_multi_timeframe(candles_by_tf, tf)
+    status = get_current_status(tf)
+    analysis = smc_engine.analyze_multi_timeframe(candles_by_tf, tf, is_stale=status.is_stale)
     return {
         "success": True,
         "market_state": analysis.get("market_state"),
-        "status": get_current_status(tf).model_dump()
+        "status": status.model_dump()
     }
 
 @app.post("/api/refresh")

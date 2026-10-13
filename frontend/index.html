@@ -166,7 +166,8 @@
     <!-- SMC Intelligence Sidebar -->
     <div class="sidebar">
       <div class="sidebar-tabs">
-        <button class="tab-btn active" data-tab="tab-levels">Key Levels</button>
+        <button class="tab-btn active" data-tab="tab-watchlist">Watchlist & Alerts <span class="badge-alert-count" id="watchlistAlertBadge" style="display: none;">0</span></button>
+        <button class="tab-btn" data-tab="tab-levels">Key Levels</button>
         <button class="tab-btn" data-tab="tab-fvg">FVGs & POI</button>
         <button class="tab-btn" data-tab="tab-structure">Structure</button>
         <button class="tab-btn" data-tab="tab-strategy">Strategy</button>
@@ -174,8 +175,26 @@
 
       <div class="sidebar-content">
 
+        <!-- Tab 0: Trade-Readiness Watchlist & Alerts -->
+        <div class="tab-pane active" id="tab-watchlist">
+          <!-- Active Alerts Drawer -->
+          <div id="alertsDrawerArea"></div>
+
+          <!-- Watchlist Filter Chips -->
+          <div class="watchlist-filters">
+            <button class="filter-btn active" data-filter="all">All Levels (<span id="filterAllCount">0</span>)</button>
+            <button class="filter-btn" data-filter="active">Active & In-Zone (<span id="filterActiveCount">0</span>)</button>
+            <button class="filter-btn" data-filter="setups">Setups & Review (<span id="filterSetupsCount">0</span>)</button>
+          </div>
+
+          <!-- Surveillance Cards List -->
+          <div id="watchlistCardsContainer">
+            <div style="color: var(--text-dim); font-size: 11px; text-align: center; padding: 16px;">Scanning key levels for activation states...</div>
+          </div>
+        </div>
+
         <!-- Tab 1: Key Levels by Distance & Score -->
-        <div class="tab-pane active" id="tab-levels">
+        <div class="tab-pane" id="tab-levels" style="display: none;">
           <!-- Opposing HTF Warnings -->
           <div id="opposingAlertsArea"></div>
 

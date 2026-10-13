@@ -8,4 +8,4 @@ Write-Host "  API: https://api.india.delta.exchange                  " -Foregrou
 Write-Host "  URL: http://127.0.0.1:8000                             " -ForegroundColor Yellow
 Write-Host "==========================================================" -ForegroundColor Yellow
 
-uv run --python 3.12 --with fastapi --with uvicorn --with httpx --with websockets --with pydantic --with python-dateutil python -m uvicorn backend.app:app --host 127.0.0.1 --port 8000
+uv run --python 3.12 --with fastapi --with uvicorn --with httpx --with websockets --with pydantic --with python-dateutil python -m uvicorn backend.app:app --host 127.0.0.1 --port 8000 --reload

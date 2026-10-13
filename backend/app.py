@@ -88,9 +88,9 @@ def get_current_status(timeframe: str = "1H") -> MarketDataStatus:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: fetch historical candles across all 4 timeframes
+    # Startup: fetch historical candles across all timeframes ensuring at least 24 hours of data
     print(f"Starting SMC Dashboard backend for {DEFAULT_SYMBOL}...")
-    await adapter.initialize_all_timeframes(DEFAULT_SYMBOL, limit=300)
+    await adapter.initialize_all_timeframes(DEFAULT_SYMBOL)
     # Start live WebSocket stream across all timeframes
     await adapter.start_streaming(
         symbol=DEFAULT_SYMBOL,
@@ -224,8 +224,8 @@ async def get_market_state(timeframe: str = Query("1H")):
 
 @app.post("/api/refresh")
 async def refresh_market_data():
-    await adapter.initialize_all_timeframes(DEFAULT_SYMBOL, limit=300)
-    return {"success": True, "message": "Refreshed historical candles for all timeframes"}
+    await adapter.initialize_all_timeframes(DEFAULT_SYMBOL)
+    return {"success": True, "message": "Refreshed historical candles for all timeframes (>= 24h data)"}
 
 # WebSocket Endpoint for Live Frontend Streaming
 @app.websocket("/ws")

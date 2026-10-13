@@ -67,13 +67,18 @@ class SMCEngine:
         # Current market price
         current_price = current_candles[-1].close if current_candles else 0.0
 
-        # 1. Fair Value Gaps (1D, 4H, and Current TF)
+        # 1. Fair Value Gaps (1D, 4H, 1H, and Current TF)
         daily_fvgs = calculate_fvgs(daily_candles, "1D", config)
         h4_fvgs = calculate_fvgs(h4_candles, "4H", config)
+        h1_candles = candles_by_tf.get("1H", [])
+        h1_fvgs = calculate_fvgs(h1_candles, "1H", config) if h1_candles else []
+
         if tf == "1D":
             curr_fvgs = daily_fvgs
         elif tf == "4H":
             curr_fvgs = h4_fvgs
+        elif tf == "1H":
+            curr_fvgs = h1_fvgs
         else:
             curr_fvgs = calculate_fvgs(current_candles, tf, config)
 
@@ -237,6 +242,7 @@ class SMCEngine:
             "h4_trend_state": h4_trend_state.model_dump(),
             "daily_fvgs": [f.model_dump() for f in daily_fvgs],
             "h4_fvgs": [f.model_dump() for f in h4_fvgs],
+            "h1_fvgs": [f.model_dump() for f in h1_fvgs],
             "timeframe_fvgs": [f.model_dump() for f in curr_fvgs],
             "overlapping_htf_fvgs": overlapping_htf_fvgs,
             "swings": [s.model_dump() for s in swings],

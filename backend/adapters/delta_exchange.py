@@ -22,6 +22,17 @@ from backend.smc.models import Candle
 logger = logging.getLogger("DeltaAdapter")
 logging.basicConfig(level=logging.INFO)
 
+# Minimum historical candles per timeframe to guarantee at least 24 hours of continuous market data
+TIMEFRAME_LIMITS = {
+    "1D": 100,    # 100 days (exceeds 24h)
+    "4H": 150,    # 25 days (exceeds 24h)
+    "1H": 200,    # 8.3 days (exceeds 24h)
+    "30M": 200,   # 4.1 days (exceeds 24h)
+    "15M": 300,   # 3.1 days (exceeds 24h)
+    "5M": 500,    # 41.6 hours (exceeds 24h)
+    "1M": 1500,   # 25.0 hours (exceeds 24h)
+}
+
 class DeltaExchangeAdapter(BaseMarketDataAdapter):
     """
     Dedicated Market Data Adapter for Delta Exchange India.
@@ -110,13 +121,18 @@ class DeltaExchangeAdapter(BaseMarketDataAdapter):
         self,
         symbol: str = "XAUTUSD",
         timeframe: str = "1H",
-        limit: int = 500
+        limit: Optional[int] = None
     ) -> List[Candle]:
         """
         Fetch genuine historical candles from Delta Exchange India /v2/history/candles.
         Handles pagination, deduplication, and ascending sorting.
+        Guarantees at least 24 hours of historical data per timeframe.
         """
-        res = TIMEFRAME_MAP.get(timeframe.upper(), timeframe.lower())
+        tf_key = timeframe.upper()
+        if limit is None:
+            limit = TIMEFRAME_LIMITS.get(tf_key, 500)
+
+        res = TIMEFRAME_MAP.get(tf_key, timeframe.lower())
         tf_seconds = TIMEFRAME_SECONDS.get(res, 3600)
         
         now = int(time.time())
@@ -174,18 +190,18 @@ class DeltaExchangeAdapter(BaseMarketDataAdapter):
         if len(cleaned) > limit:
             cleaned = cleaned[-limit:]
 
-        self.candles[timeframe.upper()] = cleaned
+        self.candles[tf_key] = cleaned
         self.last_successful_update = int(time.time())
         return cleaned
 
-    async def initialize_all_timeframes(self, symbol: str = "XAUTUSD", limit: int = 500):
-        """Fetch historical candles for all supported timeframes."""
+    async def initialize_all_timeframes(self, symbol: str = "XAUTUSD", limit: Optional[int] = None):
+        """Fetch historical candles for all supported timeframes ensuring at least 24 hours of data."""
         tasks = [
-            self.fetch_historical_candles(symbol, tf, limit)
+            self.fetch_historical_candles(symbol, tf, limit=TIMEFRAME_LIMITS.get(tf, 500) if limit is None else limit)
             for tf in ["1D", "4H", "1H", "30M", "15M", "5M", "1M"]
         ]
         await asyncio.gather(*tasks)
-        logger.info(f"Initialized all timeframes for {symbol}: "
+        logger.info(f"Initialized all timeframes for {symbol} (>= 24h data): "
                     f"1D: {len(self.candles['1D'])}, "
                     f"4H: {len(self.candles['4H'])}, "
                     f"1H: {len(self.candles['1H'])}, "

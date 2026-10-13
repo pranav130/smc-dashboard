@@ -50,6 +50,8 @@ const dailyFvgBody = document.getElementById("dailyFvgBody");
 const dailyFvgCount = document.getElementById("dailyFvgCount");
 const h4FvgBody = document.getElementById("h4FvgBody");
 const h4FvgCount = document.getElementById("h4FvgCount");
+const h1FvgBody = document.getElementById("h1FvgBody");
+const h1FvgCount = document.getElementById("h1FvgCount");
 const liquidityBody = document.getElementById("liquidityBody");
 const bosBody = document.getElementById("bosBody");
 const bosCount = document.getElementById("bosCount");
@@ -76,6 +78,13 @@ const filterAllCount = document.getElementById("filterAllCount");
 const filterActiveCount = document.getElementById("filterActiveCount");
 const filterSetupsCount = document.getElementById("filterSetupsCount");
 let watchlistFilter = "all";
+
+// Timezone Synchronizer: Shifts UTC unix timestamps to the user's local system clock
+function toLocalChartTime(utcSeconds) {
+  if (!utcSeconds) return utcSeconds;
+  const offsetMinutes = new Date(utcSeconds * 1000).getTimezoneOffset();
+  return utcSeconds - (offsetMinutes * 60);
+}
 
 // 1. Initialize Lightweight Chart
 function initChart() {
@@ -124,6 +133,28 @@ function initChart() {
       borderColor: "#222a36",
       timeVisible: true,
       secondsVisible: false,
+      tickMarkFormatter: (time, tickMarkType, locale) => {
+        const d = new Date(time * 1000);
+        if (tickMarkType === 0) return d.getUTCFullYear().toString();
+        if (tickMarkType === 1) return d.toLocaleDateString(locale, { month: "short", timeZone: "UTC" });
+        if (tickMarkType === 2) return d.getUTCDate().toString();
+        const hh = String(d.getUTCHours()).padStart(2, "0");
+        const mm = String(d.getUTCMinutes()).padStart(2, "0");
+        return `${hh}:${mm}`;
+      },
+    },
+    localization: {
+      dateFormat: "yyyy-MM-dd",
+      timeFormatter: (time) => {
+        const d = new Date(time * 1000);
+        const hh = String(d.getUTCHours()).padStart(2, "0");
+        const mm = String(d.getUTCMinutes()).padStart(2, "0");
+        return `${hh}:${mm}`;
+      },
+      dateFormatter: (time) => {
+        const d = new Date(time * 1000);
+        return d.toISOString().split("T")[0];
+      },
     },
   });
 
@@ -154,7 +185,9 @@ function initChart() {
     }
     const price = param.seriesPrices.get(candleSeries);
     const vol = param.seriesPrices.get(volumeSeries) || 0;
-    legendOHLC.textContent = `O: ${price.open?.toFixed(2)}  H: ${price.high?.toFixed(2)}  L: ${price.low?.toFixed(2)}  C: ${price.close?.toFixed(2)}  V: ${Math.round(vol)}`;
+    const d = new Date(param.time * 1000);
+    const timeStr = `${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")}`;
+    legendOHLC.textContent = `[${timeStr}]  O: ${price.open?.toFixed(2)}  H: ${price.high?.toFixed(2)}  L: ${price.low?.toFixed(2)}  C: ${price.close?.toFixed(2)}  V: ${Math.round(vol)}`;
   });
 
   // Handle resize
@@ -253,7 +286,7 @@ function renderChartData(analysis) {
 
       const candles = cData.candles;
       const chartCandles = candles.map((c) => ({
-        time: c.time,
+        time: toLocalChartTime(c.time),
         open: c.open,
         high: c.high,
         low: c.low,
@@ -261,13 +294,16 @@ function renderChartData(analysis) {
       }));
 
       const chartVolumes = candles.map((c) => ({
-        time: c.time,
+        time: toLocalChartTime(c.time),
         value: c.volume,
         color: c.close >= c.open ? "rgba(38, 166, 154, 0.4)" : "rgba(239, 83, 80, 0.4)",
       }));
 
       candleSeries.setData(chartCandles);
       volumeSeries.setData(chartVolumes);
+      
+      // Auto-fit to show full continuous history (guaranteed at least 24 hours)
+      chart.timeScale().fitContent();
 
       clearOverlayLines();
       drawSMCLevels(analysis);
@@ -362,10 +398,50 @@ function drawSMCLevels(analysis) {
         activeLines.push(topBound, botBound);
       }
     });
+
+    // 2b. 1-Hour (1H) FVGs: Lighter colors than 4H & Daily to avoid visual clashing when overlapping
+    // Bullish 1H FVG: Mint (#5eead4) | Bearish 1H FVG: Peach (#fdba74)
+    if (currentTf !== "1D" && currentTf !== "4H") {
+      const h1List = (currentTf === "1H") ? (analysis.timeframe_fvgs || []) : (analysis.h1_fvgs || []);
+      h1List.slice(-4).forEach((f) => {
+        if (!f.mitigated && !f.inverted) {
+          const isBullish = f.direction === "bullish";
+          const fvgColor = isBullish ? "#5eead4" : "#fdba74";
+          const boundColor = isBullish ? "rgba(94, 234, 212, 0.35)" : "rgba(253, 186, 116, 0.35)";
+          const dirLabel = isBullish ? "Bullish" : "Bearish";
+
+          const midLine = candleSeries.createPriceLine({
+            price: f.midpoint,
+            color: fvgColor,
+            lineWidth: 1,
+            lineStyle: LightweightCharts.LineStyle.Dotted,
+            axisLabelVisible: true,
+            title: `1H ${dirLabel} FVG 50%`,
+          });
+          activeLines.push(midLine);
+
+          const topBound = candleSeries.createPriceLine({
+            price: f.top,
+            color: boundColor,
+            lineWidth: 1,
+            lineStyle: LightweightCharts.LineStyle.Dotted,
+            axisLabelVisible: false,
+          });
+          const botBound = candleSeries.createPriceLine({
+            price: f.bottom,
+            color: boundColor,
+            lineWidth: 1,
+            lineStyle: LightweightCharts.LineStyle.Dotted,
+            axisLabelVisible: false,
+          });
+          activeLines.push(topBound, botBound);
+        }
+      });
+    }
   }
 
-  // 3. Current Timeframe FVGs
-  if (layerToggles.ltfFvg && currentTf !== "1D" && currentTf !== "4H") {
+  // 3. Current Sub-Hourly Timeframe FVGs (30M, 15M, 5M, 1M)
+  if (layerToggles.ltfFvg && currentTf !== "1D" && currentTf !== "4H" && currentTf !== "1H") {
     (analysis.timeframe_fvgs || []).slice(-4).forEach((f) => {
       if (!f.mitigated && !f.inverted) {
         const midLine = candleSeries.createPriceLine({
@@ -438,7 +514,7 @@ function drawChartMarkers(analysis) {
   // Swing markers
   (analysis.swings || []).slice(-8).forEach((s) => {
     markers.push({
-      time: s.time,
+      time: toLocalChartTime(s.time),
       position: s.type === "high" ? "aboveBar" : "belowBar",
       color: s.type === "high" ? "#f23645" : "#089981",
       shape: s.type === "high" ? "arrowDown" : "arrowUp",
@@ -449,7 +525,7 @@ function drawChartMarkers(analysis) {
   // Structure breaks (BoS / CHoCH) - darkened for clear high-contrast readability
   (analysis.bos_signals || []).slice(-4).forEach((b) => {
     markers.push({
-      time: b.time,
+      time: toLocalChartTime(b.time),
       position: b.type === "bullish" ? "aboveBar" : "belowBar",
       color: b.kind === "CHoCH" ? "#d97706" : "#0284c7",
       shape: "circle",
@@ -579,11 +655,15 @@ async function renderWatchlist(analysis) {
     }
 
     const isHtfFvg = (entry.timeframe === "1D" || entry.timeframe === "4H") && (entry.type.includes("FVG") || entry.name.includes("FVG"));
+    const isH1Fvg = entry.timeframe === "1H" && (entry.type.includes("FVG") || entry.name.includes("FVG"));
     let typeClass = "type-fvg";
     let rangeColor = "var(--text-main)";
     if (isHtfFvg) {
       typeClass = entry.direction === "bullish" ? "type-fvg-bullish" : "type-fvg-bearish";
       rangeColor = entry.direction === "bullish" ? "#00d2b4" : "#fb923c";
+    } else if (isH1Fvg) {
+      typeClass = entry.direction === "bullish" ? "type-fvg-h1-bullish" : "type-fvg-h1-bearish";
+      rangeColor = entry.direction === "bullish" ? "#5eead4" : "#fdba74";
     } else if (entry.type.includes("OB")) {
       typeClass = "type-ob";
     } else if (entry.type.includes("Liquidity") || entry.type.includes("EQ")) {
@@ -594,7 +674,7 @@ async function renderWatchlist(analysis) {
       <div class="card-top">
         <div class="level-meta-left">
           <span class="type-tag ${typeClass}">${entry.timeframe}</span>
-          <span class="level-name-title" style="${isHtfFvg ? `color: ${rangeColor};` : ''}">${entry.name}</span>
+          <span class="level-name-title" style="${(isHtfFvg || isH1Fvg) ? `color: ${rangeColor};` : ''}">${entry.name}</span>
         </div>
         <span class="state-pill ${stateClass}">${entry.state}</span>
       </div>
@@ -732,11 +812,15 @@ function renderSidebarData(analysis) {
       const distSign = l.distance >= 0 ? `+${l.distance.toFixed(2)}` : l.distance.toFixed(2);
       const isNear = Math.abs(l.distance) < 20.0;
       const isHtfFvg = (l.timeframe === "1D" || l.timeframe === "4H") && (l.type.includes("FVG") || l.name.includes("FVG"));
+      const isH1Fvg = l.timeframe === "1H" && (l.type.includes("FVG") || l.name.includes("FVG"));
       let typeClass = "type-fvg";
       let priceColor = "inherit";
       if (isHtfFvg) {
         typeClass = l.direction === "bullish" ? "type-fvg-bullish" : "type-fvg-bearish";
         priceColor = l.direction === "bullish" ? "#00d2b4" : "#fb923c";
+      } else if (isH1Fvg) {
+        typeClass = l.direction === "bullish" ? "type-fvg-h1-bullish" : "type-fvg-h1-bearish";
+        priceColor = l.direction === "bullish" ? "#5eead4" : "#fdba74";
       } else if (l.type.includes("Liquidity")) typeClass = "type-liq";
       else if (l.type.includes("OB")) typeClass = "type-ob";
       else if (l.type.includes("Psych")) typeClass = "type-psych";
@@ -752,7 +836,7 @@ function renderSidebarData(analysis) {
       }
 
       tr.innerHTML = `
-        <td><span class="type-tag ${typeClass}">${l.timeframe || ""}</span> <span style="font-weight: 500; ${isHtfFvg ? `color: ${priceColor};` : ''}" title="${l.score_reason || ''}">${l.name}</span></td>
+        <td><span class="type-tag ${typeClass}">${l.timeframe || ""}</span> <span style="font-weight: 500; ${(isHtfFvg || isH1Fvg) ? `color: ${priceColor};` : ''}" title="${l.score_reason || ''}">${l.name}</span></td>
         <td style="font-weight: 600; color: ${priceColor};">$${l.price.toFixed(2)}</td>
         <td class="${isNear ? "dist-near" : "dist-far"}">${distSign} (${l.distance_pct}%)</td>
         <td>${statusInfo}</td>
@@ -810,6 +894,12 @@ function renderSidebarData(analysis) {
 
   renderFvgList(h4FvgBody, analysis.h4_fvgs || [], "4H");
   h4FvgCount.textContent = (analysis.h4_fvgs || []).length;
+
+  if (h1FvgBody && h1FvgCount) {
+    const h1List = analysis.h1_fvgs || (currentTf === "1H" ? analysis.timeframe_fvgs : []) || [];
+    renderFvgList(h1FvgBody, h1List, "1H");
+    h1FvgCount.textContent = h1List.length;
+  }
 
   // Overlapping HTF FVGs
   const overlaps = analysis.overlapping_htf_fvgs || [];
@@ -929,13 +1019,17 @@ function renderFvgList(container, fvgs, tf) {
     div.style.borderBottom = "1px solid rgba(35, 42, 56, 0.4)";
     div.style.fontSize = "11px";
     const isHtf = tf === "1D" || tf === "4H";
+    const isH1 = tf === "1H";
     const isBull = f.direction === "bullish";
-    const dirColor = isHtf
-      ? (isBull ? "#00b49f" : "#f97316")
-      : (isBull ? "var(--green)" : "var(--red)");
-    const poiColor = isHtf
-      ? (isBull ? "#00d2b4" : "#fb923c")
-      : "var(--accent-gold)";
+    let dirColor = isBull ? "var(--green)" : "var(--red)";
+    let poiColor = "var(--accent-gold)";
+    if (isHtf) {
+      dirColor = isBull ? "#00b49f" : "#f97316";
+      poiColor = isBull ? "#00d2b4" : "#fb923c";
+    } else if (isH1) {
+      dirColor = isBull ? "#5eead4" : "#fdba74";
+      poiColor = isBull ? "#5eead4" : "#fdba74";
+    }
 
     div.innerHTML = `
       <div style="display: flex; justify-content: space-between;">
@@ -1054,15 +1148,16 @@ function connectWebSocket() {
       if (data.event === "candle_update") {
         if (data.timeframe === currentTf && data.candle && candleSeries) {
           const c = data.candle;
+          const localTime = toLocalChartTime(c.time);
           candleSeries.update({
-            time: c.time,
+            time: localTime,
             open: c.open,
             high: c.high,
             low: c.low,
             close: c.close,
           });
           volumeSeries.update({
-            time: c.time,
+            time: localTime,
             value: c.volume,
             color: c.close >= c.open ? "rgba(38, 166, 154, 0.4)" : "rgba(239, 83, 80, 0.4)",
           });

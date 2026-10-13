@@ -606,6 +606,18 @@ header {
   border: 1px solid rgba(249, 115, 22, 0.4);
 }
 
+.type-fvg-h1-bullish {
+  background: rgba(94, 234, 212, 0.15);
+  color: #5eead4;
+  border: 1px solid rgba(94, 234, 212, 0.35);
+}
+
+.type-fvg-h1-bearish {
+  background: rgba(253, 186, 116, 0.15);
+  color: #fdba74;
+  border: 1px solid rgba(253, 186, 116, 0.35);
+}
+
 .type-liq {
   background: rgba(41, 182, 246, 0.2);
   color: var(--blue);

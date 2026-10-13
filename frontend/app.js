@@ -1109,13 +1109,14 @@ setInterval(() => {
 // 10. Fullscreen Mode Manager
 function setupFullscreenToggle() {
   const chartPanel = document.querySelector(".chart-panel");
-  const btnFs = document.getElementById("btnFullscreen");
-  const iconExpand = document.getElementById("fsIconExpand");
-  const iconCompress = document.getElementById("fsIconCompress");
-  const btnText = document.getElementById("fsBtnText");
   const container = document.getElementById("chart");
+  const fsTriggers = [
+    document.getElementById("btnFullscreen"),
+    document.getElementById("btnHeaderFs"),
+    document.getElementById("btnChartCornerFs"),
+  ].filter(Boolean);
 
-  if (!btnFs || !chartPanel) return;
+  if (!chartPanel) return;
 
   function resizeChart() {
     if (chart && container) {
@@ -1125,23 +1126,37 @@ function setupFullscreenToggle() {
           height: container.clientHeight,
         });
         chart.timeScale().fitContent();
-      }, 60);
+      }, 70);
     }
+  }
+
+  function updateUiState(isFs) {
+    document.querySelectorAll(".fs-icon-exp").forEach((el) => {
+      el.style.display = isFs ? "none" : "inline";
+    });
+    document.querySelectorAll(".fs-icon-cmp").forEach((el) => {
+      el.style.display = isFs ? "inline" : "none";
+    });
+    document.querySelectorAll(".fs-label").forEach((el) => {
+      el.textContent = isFs ? "Exit Full Screen" : "Full Screen";
+    });
+    const oldFsText = document.getElementById("fsBtnText");
+    if (oldFsText) oldFsText.textContent = isFs ? "Exit Full Screen" : "Full Screen";
+    const oldExpand = document.getElementById("fsIconExpand");
+    if (oldExpand) oldExpand.style.display = isFs ? "none" : "inline";
+    const oldCompress = document.getElementById("fsIconCompress");
+    if (oldCompress) oldCompress.style.display = isFs ? "inline" : "none";
   }
 
   function toggleFullscreen() {
     const isFs = chartPanel.classList.toggle("is-fullscreen");
+    updateUiState(isFs);
+
     if (isFs) {
-      if (iconExpand) iconExpand.style.display = "none";
-      if (iconCompress) iconCompress.style.display = "inline";
-      if (btnText) btnText.textContent = "Exit Full Screen";
       if (chartPanel.requestFullscreen && !document.fullscreenElement) {
         chartPanel.requestFullscreen().catch(() => {});
       }
     } else {
-      if (iconExpand) iconExpand.style.display = "inline";
-      if (iconCompress) iconCompress.style.display = "none";
-      if (btnText) btnText.textContent = "Full Screen";
       if (document.fullscreenElement && document.exitFullscreen) {
         document.exitFullscreen().catch(() => {});
       }
@@ -1149,14 +1164,15 @@ function setupFullscreenToggle() {
     resizeChart();
   }
 
-  btnFs.addEventListener("click", toggleFullscreen);
+  fsTriggers.forEach((btn) => {
+    btn.addEventListener("click", toggleFullscreen);
+  });
 
   document.addEventListener("fullscreenchange", () => {
-    if (!document.fullscreenElement && chartPanel.classList.contains("is-fullscreen")) {
+    const isNativeFs = Boolean(document.fullscreenElement);
+    if (!isNativeFs && chartPanel.classList.contains("is-fullscreen")) {
       chartPanel.classList.remove("is-fullscreen");
-      if (iconExpand) iconExpand.style.display = "inline";
-      if (iconCompress) iconCompress.style.display = "none";
-      if (btnText) btnText.textContent = "Full Screen";
+      updateUiState(false);
       resizeChart();
     }
   });
@@ -1164,7 +1180,10 @@ function setupFullscreenToggle() {
   // Keyboard shortcut 'F' to toggle fullscreen
   window.addEventListener("keydown", (e) => {
     if (e.key === "f" || e.key === "F") {
-      if (document.activeElement && (document.activeElement.tagName === "INPUT" || document.activeElement.tagName === "TEXTAREA")) {
+      if (
+        document.activeElement &&
+        (document.activeElement.tagName === "INPUT" || document.activeElement.tagName === "TEXTAREA")
+      ) {
         return;
       }
       toggleFullscreen();

@@ -47,6 +47,11 @@
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
         Sync Data
       </button>
+      <button class="btn-header-fs" id="btnHeaderFs" title="Toggle Chart Full Screen (Shortcut: Press 'F')">
+        <svg class="fs-icon-exp" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+        <svg class="fs-icon-cmp" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="display: none;"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/></svg>
+        <span class="fs-label">Full Screen</span>
+      </button>
     </div>
   </header>
 
@@ -161,7 +166,7 @@
         </div>
       </div>
 
-      <!-- Chart Container with Floating Legend -->
+      <!-- Chart Container with Floating Legend & Corner Fullscreen Button -->
       <div class="chart-container">
         <div class="chart-overlay-legend">
           <div class="legend-header-row">
@@ -169,6 +174,14 @@
             <span class="legend-ohlc" id="legendOHLC">O: -- H: -- L: -- C: -- V: --</span>
           </div>
         </div>
+
+        <!-- Floating Corner Fullscreen Button (Top Right of Chart Canvas) -->
+        <button class="chart-corner-fs-btn" id="btnChartCornerFs" title="Toggle Full Screen Chart (Shortcut: Press 'F')">
+          <svg class="fs-icon-exp" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+          <svg class="fs-icon-cmp" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="display: none;"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/></svg>
+          <span class="fs-label">Full Screen</span>
+        </button>
+
         <div id="chart"></div>
       </div>
     </div>

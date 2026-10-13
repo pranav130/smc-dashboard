@@ -48,6 +48,9 @@ def find_displacement_candles(
 
     for i in range(1, len(candles)):
         c = candles[i]
+        # Prevent premature signals: displacement is confirmed only at candle close
+        if c.is_forming:
+            continue
         body = abs(c.close - c.open)
 
         # ATR uses only candles up to and including i (no lookahead)

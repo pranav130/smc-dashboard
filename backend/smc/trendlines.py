@@ -68,7 +68,7 @@ def calculate_trendlines(
                 for c in candles[h2_idx + 1:]:
                     line_price = h1.price + slope * (c.time - h1.time)
                     if config.trendline_break_requires_close:
-                        if c.close > line_price:
+                        if not c.is_forming and c.close > line_price:
                             broken = True
                             breakout_time = c.time
                             breakout_ist = c.ist_time
@@ -130,7 +130,7 @@ def calculate_trendlines(
                 for c in candles[l2_idx + 1:]:
                     line_price = l1.price + slope * (c.time - l1.time)
                     if config.trendline_break_requires_close:
-                        if c.close < line_price:
+                        if not c.is_forming and c.close < line_price:
                             broken = True
                             breakout_time = c.time
                             breakout_ist = c.ist_time

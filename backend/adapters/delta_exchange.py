@@ -201,6 +201,9 @@ class DeltaExchangeAdapter(BaseMarketDataAdapter):
             cleaned = cleaned[-limit:]
 
         self.candles[tf_key] = cleaned
+        forming = self.forming_candles.get(tf_key)
+        if forming and cleaned and forming.time <= cleaned[-1].time:
+            self.forming_candles[tf_key] = None
         self.last_successful_update = int(time.time())
         return cleaned
 

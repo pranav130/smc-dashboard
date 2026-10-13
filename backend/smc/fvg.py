@@ -42,6 +42,10 @@ def calculate_fvgs(
         c1 = candles[i - 1]  # The displacement / impulse candle
         c2 = candles[i]
 
+        # Prevent premature / repainting FVGs: candle 3 must be closed
+        if c2.is_forming:
+            continue
+
         body1 = abs(c1.close - c1.open)
         is_displacement = body1 >= (config.displacement_body_atr_multiplier * avg_body)
 
@@ -144,8 +148,8 @@ def calculate_fvgs(
                         fvg.mitigated_ist = c.ist_time
                         fvg.mitigation_level = "fully_mitigated"
 
-                # Inversion: candle close fully below gap bottom
-                if c.close < fvg.bottom:
+                # Inversion: candle close fully below gap bottom (requires closed candle)
+                if not c.is_forming and c.close < fvg.bottom:
                     fvg.inverted = True
                     fvg.inverted_at = c.time
                     break
@@ -163,8 +167,8 @@ def calculate_fvgs(
                         fvg.mitigated_ist = c.ist_time
                         fvg.mitigation_level = "fully_mitigated"
 
-                # Inversion: candle close fully above gap top
-                if c.close > fvg.top:
+                # Inversion: candle close fully above gap top (requires closed candle)
+                if not c.is_forming and c.close > fvg.top:
                     fvg.inverted = True
                     fvg.inverted_at = c.time
                     break

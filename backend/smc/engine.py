@@ -278,10 +278,10 @@ class SMCEngine:
             htf_crit_ranges.append((o_fvg.get("overlap_bottom", 0.0), o_fvg.get("overlap_top", 0.0)))
 
         for entry in watchlist_entries:
-            # Check for extreme confluence
+            # Check for extreme confluence (only fully confirmed ACTIVE setups can escalate to EXTREME)
             is_extreme = False
             reasons = []
-            if entry.state in ["CHECKLIST REVIEW", "SETUP TO INSPECT"]:
+            if entry.state == "CHECKLIST REVIEW":
                 # Check HTF overlap
                 if entry.top and entry.bottom:
                     for crit_b, crit_t in htf_crit_ranges:

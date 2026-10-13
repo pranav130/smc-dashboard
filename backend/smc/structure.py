@@ -87,6 +87,9 @@ def find_swings(
         low_val = c_pivot.low
         confirm_idx = pivot_idx + window  # first bar at which this is knowable
         c_confirm = candles[confirm_idx]
+        # Prevent premature swings: confirmation candle must be closed
+        if c_confirm.is_forming:
+            continue
 
         # --- Swing High ---
         is_sh = all(
@@ -226,6 +229,10 @@ def calculate_bos(
     processed_swing_idx = 0
 
     for c_idx, c in enumerate(candles):
+        # BoS / CHoCH requires candle close confirmation; forming candles cannot confirm breaks
+        if c.is_forming:
+            continue
+
         # First, absorb any swings that are now confirmed (confirm_time <= c.time)
         while processed_swing_idx < len(swings) and swings[processed_swing_idx].confirm_time <= c.time:
             sw = swings[processed_swing_idx]

@@ -34,10 +34,29 @@ class AlertStore:
       trigger persistent alerts.
     - Escalation of severity breaks cooldown immediately.
     """
+STATE_SEVERITY: Dict[str, int] = {
+    "INACTIVE": 0,
+    "APPROACHING": 1,
+    "AT KEY LEVEL": 2,
+    "REACTION DEVELOPING": 3,
+    "SETUP TO INSPECT": 4,
+    "CHECKLIST REVIEW": 5,
+    "EXTREME": 6,
+    "INVALIDATED / PASSED": -1,
+    "SWEPT / MITIGATED": -1,
+}
+
+
+class AlertStore:
+    """
+    Central Alert Engine for Key-Level and Setup State Transitions.
+    Deduplicates events by level_id and state, enforcing configurable cooldown.
+    """
     def __init__(self, cooldown_seconds: int = 300):
         self._alerts: Dict[str, WatchlistAlert] = {}
         self._last_state_hash: Dict[str, str] = {}
         self._last_alert_time: Dict[str, float] = {}
+        self._last_severity: Dict[str, int] = {}
         self.cooldown_seconds = cooldown_seconds
 
     def get_alerts(self, include_acknowledged: bool = False) -> List[WatchlistAlert]:
@@ -70,6 +89,10 @@ class AlertStore:
         is_extreme: bool = False,
         only_actionable: bool = False
     ) -> Optional[WatchlistAlert]:
+        # Stale feed handling: stale data must not produce new active alerts
+        if is_stale and only_actionable:
+            return None
+
         # Alert policy: optionally filter to actionable transitions only
         if only_actionable:
             notify_states = ["SETUP TO INSPECT", "CHECKLIST REVIEW"]
@@ -78,19 +101,27 @@ class AlertStore:
 
         alert_severity_state = "EXTREME" if is_extreme else state
         state_hash = f"{level_id}_{alert_severity_state}"
-        now = time.time()
+        t_now = float(timestamp) if timestamp > 0 else time.time()
 
         last_hash = self._last_state_hash.get(level_id)
-        last_time = self._last_alert_time.get(level_id, 0)
+        last_time = self._last_alert_time.get(level_id, 0.0)
+        last_sev = self._last_severity.get(level_id, 0)
+        curr_sev = STATE_SEVERITY.get(alert_severity_state, 0)
 
-        # If already alerted for this exact state within cooldown window, suppress duplicate
-        if last_hash == state_hash and (now - last_time < self.cooldown_seconds):
-            return None
+        # Cooldown & deduplication:
+        if (t_now - last_time) < self.cooldown_seconds:
+            # Exact duplicate within cooldown window -> suppress
+            if last_hash == state_hash:
+                return None
+            # If not an escalation to a strictly higher severity (e.g. oscillating between watch states) -> suppress
+            if curr_sev <= last_sev and not (last_sev < 0 and curr_sev > 0):
+                return None
 
         # Record new alert
         self._last_state_hash[level_id] = state_hash
-        self._last_alert_time[level_id] = now
-        alert_id = f"alt_{level_id}_{alert_severity_state.lower().replace(' ', '_')}_{timestamp}"
+        self._last_alert_time[level_id] = t_now
+        self._last_severity[level_id] = curr_sev
+        alert_id = f"alt_{level_id}_{alert_severity_state.lower().replace(' ', '_')}_{int(t_now)}"
 
         prefix = "[EXTREME CONFLUENCE]" if is_extreme else (
             "[ACTIVE SETUP]" if state == "CHECKLIST REVIEW" else (
@@ -107,7 +138,7 @@ class AlertStore:
             state=state,
             message=alert_msg,
             evidence=evidence,
-            timestamp=timestamp,
+            timestamp=int(t_now),
             ist_time=ist_time,
             acknowledged=False,
             is_stale_suppressed=is_stale
@@ -298,6 +329,9 @@ def evaluate_level_activation(
             # If no formal sweep, check for rejection candle at the zone
             if not sweep_found and in_zone and recent_candles:
                 for rc in recent_candles[-3:]:
+                    # Require closed candle: provisional forming candle cannot confirm rejection
+                    if rc.is_forming:
+                        continue
                     body = abs(rc.close - rc.open)
                     upper_wick = rc.high - max(rc.close, rc.open)
                     lower_wick = min(rc.close, rc.open) - rc.low
@@ -371,7 +405,7 @@ def evaluate_level_activation(
                             evidence.append(checklist[3].evidence)
                             break
 
-            # If all 5 criteria are met, promote to CHECKLIST REVIEW!
+            # If all 5 criteria are met, promote to CHECKLIST REVIEW (unless feed is stale)!
             if (
                 checklist[0].satisfied and
                 checklist[1].satisfied and
@@ -379,17 +413,22 @@ def evaluate_level_activation(
                 checklist[3].satisfied and
                 checklist[4].satisfied
             ):
-                state = "CHECKLIST REVIEW"
-                state_reason = "Full SMC setup sequence detected. Evidence warrants manual checklist verification."
+                if is_stale:
+                    state = "SETUP TO INSPECT"
+                    state_reason = "Full setup sequence detected, but market data feed is STALE (>60s). Retained in WATCH pending live data."
+                else:
+                    state = "CHECKLIST REVIEW"
+                    state_reason = "Full SMC setup sequence detected. Evidence warrants manual checklist verification."
 
     # Register alert transition in alert store
+    t_event = current_candles[-1].time if current_candles else int(time.time())
     alert = global_alert_store.register_transition(
         level_id=level_id,
         level_name=name,
         timeframe=timeframe,
         state=state,
         evidence=evidence,
-        timestamp=int(time.time()),
+        timestamp=t_event,
         ist_time=(current_candles[-1].ist_time or "") if current_candles else "",
         is_stale=is_stale,
         only_actionable=True

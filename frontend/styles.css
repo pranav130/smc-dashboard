@@ -261,6 +261,20 @@ body {
   transform: rotate(45deg);
 }
 
+.btn-paper-nav {
+  text-decoration: none;
+  background: rgba(38, 166, 154, 0.12);
+  border-color: rgba(38, 166, 154, 0.4);
+  color: var(--teal-bull);
+  font-weight: 600;
+}
+
+.btn-paper-nav:hover {
+  background: rgba(38, 166, 154, 0.22);
+  border-color: var(--teal-bull);
+  color: #ffffff;
+}
+
 /* --------------------------------------------------------------------------
    2. Collapsible Details Panel
    -------------------------------------------------------------------------- */

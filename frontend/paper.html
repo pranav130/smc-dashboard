@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>XAUTUSD Paper Trading · 24/7 Persistent Simulated Command Center</title>
+  <link rel="stylesheet" href="/static/paper.css">
+</head>
+<body>
+
+  <!-- Top Header -->
+  <header class="paper-header">
+    <div class="header-left">
+      <a href="/" class="btn-back" title="Return to Main SMC Terminal">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+        <span>Main Terminal</span>
+      </a>
+      <div class="brand-divider"></div>
+      <div class="brand-title">
+        <span class="badge-mode">24/7 SIMULATION</span>
+        <span class="title-text">XAUTUSD Paper Trading Command Center</span>
+      </div>
+    </div>
+
+    <div class="header-right">
+      <div class="status-indicator" id="monitorStatus">
+        <span class="status-dot pulse"></span>
+        <span id="monitorStatusText">24/7 CLOUD MONITOR ACTIVE</span>
+      </div>
+      <button class="btn-action" id="btnToggleAuto" title="Toggle Automated Paper Trades from SMC Setups">
+        <span id="autoTradingText">Auto-Execute Signals: ON</span>
+      </button>
+      <button class="btn-action btn-danger" id="btnResetAccount" title="Reset Paper Account Balance">
+        Reset Balance
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Content Layout -->
+  <main class="paper-container">
+
+    <!-- KPI Metric Cards Grid -->
+    <section class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-label">Simulated Balance</div>
+        <div class="kpi-value highlight" id="statBalance">$10,000.00</div>
+        <div class="kpi-sub">Cash reserve (USD)</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Account Equity</div>
+        <div class="kpi-value" id="statEquity">$10,000.00</div>
+        <div class="kpi-sub">Balance + Open P&L</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Unrealized P&L</div>
+        <div class="kpi-value" id="statUnrealizedPnl">$0.00</div>
+        <div class="kpi-sub" id="statUnrealizedPct">0.00%</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Realized Net P&L</div>
+        <div class="kpi-value" id="statRealizedPnl">$0.00</div>
+        <div class="kpi-sub" id="statTradesCount">0 Trades Closed</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Win Rate</div>
+        <div class="kpi-value" id="statWinRate">0.0%</div>
+        <div class="kpi-sub" id="statWinRatio">0W / 0L</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Gold Price Reference</div>
+        <div class="kpi-value gold" id="statGoldPrice">--.--</div>
+        <div class="kpi-sub">Delta India Benchmark Spot</div>
+      </div>
+    </section>
+
+    <!-- Operational Panels: New Order & Open Positions -->
+    <div class="dashboard-split">
+      
+      <!-- Panel 1: Open Paper Positions -->
+      <section class="panel-box positions-panel">
+        <div class="panel-header">
+          <div class="panel-title">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+            Active Open Positions (<span id="openCount">0</span>)
+          </div>
+          <span class="refresh-clock" id="lastRefreshTime">Updated just now</span>
+        </div>
+        <div class="table-wrap">
+          <table class="data-table" id="positionsTable">
+            <thead>
+              <tr>
+                <th>Symbol</th>
+                <th>Side</th>
+                <th>Qty</th>
+                <th>Entry</th>
+                <th>Current</th>
+                <th>Stop Loss</th>
+                <th>Take Profit</th>
+                <th>P&L ($)</th>
+                <th>Strategy</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="positionsTbody">
+              <tr>
+                <td colspan="10" class="empty-state">No open positions currently. Monitoring market 24/7 for SMC setups.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Panel 2: Manual Simulated Order Placement -->
+      <section class="panel-box order-panel">
+        <div class="panel-header">
+          <div class="panel-title">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+            Simulated Paper Order
+          </div>
+          <span class="badge-lock">STRICT SIMULATION</span>
+        </div>
+        <form class="order-form" id="orderForm">
+          <div class="form-row">
+            <label>Direction</label>
+            <div class="side-selector">
+              <button type="button" class="btn-side side-buy active" data-side="BUY">BUY / LONG</button>
+              <button type="button" class="btn-side side-sell" data-side="SELL">SELL / SHORT</button>
+            </div>
+          </div>
+          <div class="form-row">
+            <label for="orderQty">Size (Ounces)</label>
+            <input type="number" id="orderQty" step="0.01" min="0.01" max="10" value="0.10" required>
+          </div>
+          <div class="form-row">
+            <label for="orderSL">Stop Loss (USD)</label>
+            <input type="number" id="orderSL" step="0.1" placeholder="Optional stop price" required>
+          </div>
+          <div class="form-row">
+            <label for="orderTP">Take Profit (USD)</label>
+            <input type="number" id="orderTP" step="0.1" placeholder="Optional target price" required>
+          </div>
+          <div class="form-row">
+            <label for="orderStrategy">Strategy Tag</label>
+            <input type="text" id="orderStrategy" value="Manual Discretionary Paper Trade" required>
+          </div>
+          <button type="submit" class="btn-submit" id="btnPlaceOrder">Place Simulated Order</button>
+        </form>
+      </section>
+
+    </div>
+
+    <!-- Panel 3: Closed Trade History -->
+    <section class="panel-box trades-panel">
+      <div class="panel-header">
+        <div class="panel-title">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+          Historical Closed Trades (Persistent Database)
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table class="data-table" id="tradesTable">
+          <thead>
+            <tr>
+              <th>Trade ID</th>
+              <th>Side</th>
+              <th>Qty</th>
+              <th>Entry Price</th>
+              <th>Exit Price</th>
+              <th>Net P&L ($)</th>
+              <th>Return (%)</th>
+              <th>Duration</th>
+              <th>Exit Reason</th>
+              <th>Exit Time (IST)</th>
+              <th>Strategy</th>
+            </tr>
+          </thead>
+          <tbody id="tradesTbody">
+            <tr>
+              <td colspan="11" class="empty-state">No closed trade records yet. Completed trades will persist here across server restarts.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Panel 4: 24/7 Activity & Audit Log -->
+    <section class="panel-box logs-panel">
+      <div class="panel-header">
+        <div class="panel-title">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+          24/7 System & Trade Audit Log
+        </div>
+      </div>
+      <div class="log-stream" id="logStream">
+        <div class="log-line info">[INIT] 24/7 Continuous Paper Engine loaded. Persistent database connected.</div>
+      </div>
+    </section>
+
+  </main>
+
+  <script src="/static/paper.js"></script>
+</body>
+</html>

@@ -1,0 +1,34 @@
+services:
+  - type: web
+    name: smc-dashboard
+    runtime: python
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn backend.app:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.0
+      - key: ENVIRONMENT
+        value: production
+      - key: EXECUTION_MODE
+        value: PAPER
+      - key: DELTA_PRICE_SOURCE
+        value: index
+      - key: INITIAL_PAPER_BALANCE
+        value: "10000.0"
+      - key: AUTO_PAPER_TRADING_ENABLED
+        value: "true"
+      - key: ALLOWED_ORIGINS
+        value: "*"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: smc-postgres
+          property: connectionString
+
+databases:
+  - name: smc-postgres
+    plan: starter
+    databaseName: smc_paper_trading
+    user: smc_user

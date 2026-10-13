@@ -1,12 +1,14 @@
 import asyncio
 import os
 import time
+import logging
 from contextlib import asynccontextmanager
-from typing import Set, Optional
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query
-from fastapi.responses import FileResponse
+from typing import Set, Optional, Dict, Any
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query, Header, HTTPException, Body
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
 
 from backend.config import (
     DEFAULT_SYMBOL,
@@ -15,20 +17,41 @@ from backend.config import (
     MARK_SYMBOL,
     PRICE_SOURCE,
     IST_TZ,
+    ALLOWED_ORIGINS,
+    ADMIN_API_KEY,
+    validate_environment
 )
 from backend.adapters.delta_exchange import DeltaExchangeAdapter, MIN_24H_CANDLES, TIMEFRAME_LIMITS
 from backend.smc.models import MarketDataStatus, Candle, AnalysisConfig
 from backend.smc.engine import SMCEngine
+from backend.paper.database import init_db, get_db
+from backend.paper.engine import PaperTradingEngine
+from backend.paper.models import PaperLogModel
 
-# Initialize adapter & engine
+logger = logging.getLogger("App")
+logging.basicConfig(level=logging.INFO)
+
+# Validate environment safety
+validate_environment()
+
+# Initialize adapter, engine & persistent paper trading system
 adapter = DeltaExchangeAdapter()
 smc_engine = SMCEngine()
+paper_engine = PaperTradingEngine()
 
 # Active WebSocket connections to browser clients
 connected_clients: Set[WebSocket] = set()
 
+# Background monitoring task handle
+background_monitor_task: Optional[asyncio.Task] = None
+
 def broadcast_live_update(timeframe: str, candle: Candle):
     """Callback triggered whenever a forming or confirmed candle updates."""
+    # 1. Immediately evaluate paper trading positions on price tick
+    if candle.close > 0:
+        paper_engine.on_tick(candle.close, candle.time)
+
+    # 2. Broadcast to connected browser clients if any exist
     if not connected_clients:
         return
 
@@ -99,33 +122,110 @@ def get_current_status(timeframe: str = "1H") -> MarketDataStatus:
         warnings=warnings
     )
 
+async def _background_market_monitor_loop():
+    """
+    24/7 continuous market evaluation loop running independently of browser clients.
+    Polls/evaluates SMC setups and open paper positions periodically even with 0 active web sessions.
+    """
+    logger.info("24/7 Background Market Monitoring loop started.")
+    while True:
+        try:
+            await asyncio.sleep(5)
+            candles_1h = adapter.get_candles("1H")
+            if not candles_1h:
+                continue
+
+            current_price = candles_1h[-1].close if candles_1h else 0.0
+            if current_price <= 0:
+                continue
+
+            # Update open paper positions
+            paper_engine.on_tick(current_price)
+
+            # Evaluate multi-timeframe SMC signals for paper trading
+            candles_by_tf = {
+                tf: adapter.get_candles(tf)
+                for tf in ["1D", "4H", "1H", "30M", "15M", "5M", "1M"]
+            }
+            status = get_current_status("1H")
+            analysis = smc_engine.analyze_multi_timeframe(candles_by_tf, "1H", is_stale=status.is_stale)
+            paper_engine.evaluate_signals_for_paper_trading(analysis, current_price)
+
+        except asyncio.CancelledError:
+            logger.info("24/7 Background Market Monitoring loop stopped.")
+            break
+        except Exception as e:
+            logger.error(f"Error in continuous background monitor: {e}")
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: fetch historical candles across all timeframes ensuring at least 24 hours of data
+    # 1. Initialize persistent database tables
+    print("Initializing persistent database schema...")
+    init_db()
+
+    # 2. Fetch historical candles across all timeframes
     print(f"Starting SMC Dashboard backend for {DEFAULT_SYMBOL}...")
     await adapter.initialize_all_timeframes(DEFAULT_SYMBOL)
-    # Start live WebSocket stream across all timeframes
+
+    # 3. Start live WebSocket stream across all timeframes
     await adapter.start_streaming(
         symbol=DEFAULT_SYMBOL,
         timeframes=["1D", "4H", "1H", "30M", "15M", "5M", "1M"],
         on_candle_update=broadcast_live_update
     )
+
+    # 4. Launch 24/7 continuous market evaluation task
+    global background_monitor_task
+    background_monitor_task = asyncio.create_task(_background_market_monitor_loop())
+
     yield
+
     # Shutdown
     print("Shutting down SMC Dashboard...")
+    if background_monitor_task and not background_monitor_task.done():
+        background_monitor_task.cancel()
     await adapter.stop_streaming()
 
 app = FastAPI(title="SMC Key-Level Intelligence Dashboard", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# API Endpoints
+# ==============================================================================
+# Health Check Endpoints (for Render, Railway, Load Balancer)
+# ==============================================================================
+@app.get("/health")
+@app.get("/api/health")
+async def health_check():
+    db_ok = False
+    try:
+        with get_db() as db:
+            db.execute(text("SELECT 1"))
+        db_ok = True
+    except Exception:
+        db_ok = False
+
+    adapter_status = adapter.get_connection_status()
+    is_healthy = db_ok and (adapter_status != "Disconnected")
+
+    return {
+        "status": "healthy" if is_healthy else "degraded",
+        "timestamp": int(time.time()),
+        "database": "connected" if db_ok else "unreachable",
+        "market_feed": adapter_status,
+        "symbol": DEFAULT_SYMBOL,
+        "mode": "PAPER_TRADING",
+        "service": "smc-dashboard"
+    }
+
+# ==============================================================================
+# Main Dashboard API Endpoints (Preserved Exactly)
+# ==============================================================================
 @app.get("/api/status")
 async def get_status(timeframe: str = Query("1H")):
     return get_current_status(timeframe)
@@ -279,13 +379,91 @@ async def refresh_market_data():
     await adapter.initialize_all_timeframes(DEFAULT_SYMBOL)
     return {"success": True, "message": "Refreshed historical candles for all timeframes (>= 24h data)"}
 
+# ==============================================================================
+# Paper Trading API Endpoints (24/7 Simulated Trading & Records)
+# ==============================================================================
+@app.get("/api/paper/summary")
+async def get_paper_summary():
+    """Retrieve simulated account metrics, equity, win rate, and monitoring state."""
+    summary = paper_engine.get_account_summary()
+    return {"success": True, "data": summary}
+
+@app.get("/api/paper/positions")
+async def get_paper_positions():
+    """Retrieve currently active open simulated positions."""
+    positions = paper_engine.get_open_positions()
+    return {"success": True, "positions": positions, "count": len(positions)}
+
+@app.get("/api/paper/trades")
+async def get_paper_trades(limit: int = Query(100)):
+    """Retrieve historical closed paper trades."""
+    trades = paper_engine.get_trade_history(limit=limit)
+    return {"success": True, "trades": trades, "count": len(trades)}
+
+@app.post("/api/paper/order")
+async def place_paper_order(
+    direction: str = Body(..., embed=True),
+    quantity: float = Body(0.0, embed=True),
+    stop_loss: float = Body(0.0, embed=True),
+    take_profit: float = Body(0.0, embed=True),
+    strategy: str = Body("Manual Paper Trade", embed=True)
+):
+    """Open a simulated paper position at current market price."""
+    current_price = paper_engine.last_price
+    if current_price <= 0:
+        candles = adapter.get_candles("1H")
+        if candles:
+            current_price = candles[-1].close
+    if current_price <= 0:
+        raise HTTPException(status_code=400, detail="Market price not available yet.")
+
+    res = paper_engine.open_paper_order(
+        symbol=DEFAULT_SYMBOL,
+        direction=direction,
+        entry_price=current_price,
+        quantity=quantity,
+        stop_loss=stop_loss,
+        take_profit=take_profit,
+        strategy=strategy
+    )
+    return res
+
+@app.post("/api/paper/close")
+async def close_paper_position(position_id: str = Body(..., embed=True)):
+    """Close an open paper position at current market price."""
+    res = paper_engine.close_position_manually(position_id)
+    return res
+
+@app.post("/api/paper/toggle-auto")
+async def toggle_auto_paper_trading(enabled: bool = Body(..., embed=True)):
+    """Enable or disable automatic paper trade execution from SMC setup signals."""
+    return paper_engine.set_auto_trading(enabled)
+
+@app.post("/api/paper/reset")
+async def reset_paper_account(
+    balance: float = Body(10000.0, embed=True),
+    admin_key: Optional[str] = Header(None, alias="X-Admin-Key")
+):
+    """Reset simulated paper trading account. Protected by ADMIN_API_KEY if configured."""
+    if ADMIN_API_KEY and admin_key != ADMIN_API_KEY:
+        raise HTTPException(status_code=403, detail="Unauthorized: Invalid admin key.")
+    return paper_engine.reset_account(balance)
+
+@app.get("/api/paper/logs")
+async def get_paper_logs(limit: int = Query(50)):
+    """Retrieve recent paper trading and monitoring audit events."""
+    with get_db() as db:
+        logs = db.query(PaperLogModel).order_by(PaperLogModel.timestamp.desc()).limit(limit).all()
+        return {"success": True, "logs": [l.to_dict() for l in logs]}
+
+# ==============================================================================
 # WebSocket Endpoint for Live Frontend Streaming
+# ==============================================================================
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     connected_clients.add(websocket)
     try:
-        # Send initial status & sync
         await websocket.send_json({
             "event": "connected",
             "message": "Connected to Delta Exchange Live Gold Stream",
@@ -325,7 +503,9 @@ async def websocket_endpoint(websocket: WebSocket):
     except Exception:
         connected_clients.discard(websocket)
 
-# Serve Frontend static assets
+# ==============================================================================
+# Static Asset & HTML Routes
+# ==============================================================================
 frontend_dir = os.path.join(os.path.dirname(__file__), "..", "frontend")
 if os.path.exists(frontend_dir):
     app.mount("/static", StaticFiles(directory=frontend_dir), name="static")
@@ -336,3 +516,11 @@ async def serve_index():
     if os.path.exists(index_path):
         return FileResponse(index_path)
     return {"message": "SMC Dashboard Frontend building..."}
+
+@app.get("/paper")
+async def serve_paper_dashboard():
+    """Serve dedicated Paper Trading Dashboard."""
+    paper_path = os.path.join(frontend_dir, "paper.html")
+    if os.path.exists(paper_path):
+        return FileResponse(paper_path)
+    return {"message": "Paper Trading Dashboard building..."}

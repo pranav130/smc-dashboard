@@ -1,4 +1,26 @@
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
 .venv/
+env/
+venv/
 .pytest_cache/
+.coverage
+htmlcov/
+
+# Sensitive environment variables and secrets
+.env
+.env.*
+!.env.example
+
+# Local SQLite databases
+*.db
+*.sqlite
+*.sqlite3
+data/
+
+# OS / IDE artifacts
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

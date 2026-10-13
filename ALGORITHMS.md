@@ -81,6 +81,21 @@
   4. Proximity to current spot/mark price
 * Includes transparent human-readable justification for each score.
 
+### 2.11 Key-Level Activation & Trade-Readiness Watchlist
+Acts as a rule-based market-attention filter to transition levels through explicit market states:
+* **INACTIVE:** Price is outside the approaching threshold ($\text{Distance} > \max(\text{ZoneWidth}, 1.5 \times ATR)$).
+* **APPROACHING:** Price is nearing a significant Daily/4H FVG, Order Block, or liquidity area ($\text{Distance} \le \max(\text{ZoneWidth}, 1.5 \times ATR)$).
+* **AT KEY LEVEL:** Price has entered or reached the defined level boundaries ($[bottom - 0.5 \times ATR, top + 0.5 \times ATR]$).
+* **REACTION DEVELOPING:** A relevant reaction, liquidity sweep (wick pierced PDH/PDL/EQ and closed inside), or rejection wick ($\ge 1.5 \times \text{body}$ and $\ge 0.5 \times ATR$) has printed at the level.
+* **SETUP TO INSPECT:** A confirmed 1H or 30M trendline breakout/breakdown (confirmed by candle close) has occurred following key level reaction.
+* **CHECKLIST REVIEW:** Full 5-step SMC strategy sequence is satisfied:
+  1. Key level in-zone / tested
+  2. Liquidity sweep or rejection structure confirmed
+  3. 1H/30M trendline breakout confirmed by candle close
+  4. Displacement candle ($\ge 1.5 \times ATR$) or supporting LTF FVG confirmed
+  5. Clear path: No opposing higher-timeframe FVG directly blocking the trade within warning threshold
+* **INVALIDATED / PASSED:** Level was closed completely through, or fully mitigated and price has traded far away.
+
 ---
 
 ## 3. Disclaimers & Discretionary Usage

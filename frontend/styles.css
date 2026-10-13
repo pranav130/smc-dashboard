@@ -9,6 +9,8 @@
   --text-dim: #6d7585;
   --accent-gold: #f5b338;
   --accent-gold-glow: rgba(245, 179, 56, 0.25);
+  --fvg-peacock-green: #00b49f;
+  --fvg-orange: #f97316;
   --green: #089981;
   --green-glow: rgba(8, 153, 129, 0.2);
   --red: #f23645;
@@ -407,7 +409,10 @@ header {
   border-radius: 50%;
   display: inline-block;
 }
-.toggle-pill .dot.htf-fvg { background: #f5b338; }
+.toggle-pill .dot.htf-fvg {
+  background: linear-gradient(135deg, #00b49f 50%, #f97316 50%);
+  box-shadow: 0 0 4px rgba(0, 180, 159, 0.4);
+}
 .toggle-pill .dot.ltf-fvg { background: #089981; }
 .toggle-pill .dot.ob { background: #ba68c8; }
 .toggle-pill .dot.liq { background: #29b6f6; }
@@ -587,6 +592,18 @@ header {
 .type-fvg {
   background: rgba(229, 179, 66, 0.2);
   color: var(--accent-gold);
+}
+
+.type-fvg-bullish {
+  background: rgba(0, 180, 159, 0.18);
+  color: #00d2b4;
+  border: 1px solid rgba(0, 180, 159, 0.4);
+}
+
+.type-fvg-bearish {
+  background: rgba(249, 115, 22, 0.18);
+  color: #fb923c;
+  border: 1px solid rgba(249, 115, 22, 0.4);
 }
 
 .type-liq {

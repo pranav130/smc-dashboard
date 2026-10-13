@@ -327,28 +327,34 @@ function drawSMCLevels(analysis) {
     const htfFvgs = [...(analysis.daily_fvgs || []), ...(analysis.h4_fvgs || [])];
     htfFvgs.forEach((f) => {
       if (!f.mitigated && !f.inverted) {
+        const isBullish = f.direction === "bullish";
+        // User rule: Bullish FVGs = Peacock Green (#00b49f), Bearish FVGs = Orange (#f97316) for 4H & 1D
+        const fvgColor = isBullish ? "#00b49f" : "#f97316";
+        const boundColor = isBullish ? "rgba(0, 180, 159, 0.45)" : "rgba(249, 115, 22, 0.45)";
+        const dirLabel = isBullish ? "Bullish" : "Bearish";
+
         // 50% Midpoint POI line
         const midLine = candleSeries.createPriceLine({
           price: f.midpoint,
-          color: "#e5b342",
-          lineWidth: 1,
+          color: fvgColor,
+          lineWidth: 2,
           lineStyle: LightweightCharts.LineStyle.SparseDotted,
           axisLabelVisible: true,
-          title: `${f.timeframe} ${f.direction[0].toUpperCase()} FVG 50%`,
+          title: `${f.timeframe} ${dirLabel} FVG 50%`,
         });
         activeLines.push(midLine);
 
         // Boundary lines
         const topBound = candleSeries.createPriceLine({
           price: f.top,
-          color: f.direction === "bullish" ? "rgba(38, 166, 154, 0.4)" : "rgba(239, 83, 80, 0.4)",
+          color: boundColor,
           lineWidth: 1,
           lineStyle: LightweightCharts.LineStyle.Dotted,
           axisLabelVisible: false,
         });
         const botBound = candleSeries.createPriceLine({
           price: f.bottom,
-          color: f.direction === "bullish" ? "rgba(38, 166, 154, 0.4)" : "rgba(239, 83, 80, 0.4)",
+          color: boundColor,
           lineWidth: 1,
           lineStyle: LightweightCharts.LineStyle.Dotted,
           axisLabelVisible: false,
@@ -572,17 +578,29 @@ async function renderWatchlist(analysis) {
       `;
     }
 
+    const isHtfFvg = (entry.timeframe === "1D" || entry.timeframe === "4H") && (entry.type.includes("FVG") || entry.name.includes("FVG"));
+    let typeClass = "type-fvg";
+    let rangeColor = "var(--text-main)";
+    if (isHtfFvg) {
+      typeClass = entry.direction === "bullish" ? "type-fvg-bullish" : "type-fvg-bearish";
+      rangeColor = entry.direction === "bullish" ? "#00d2b4" : "#fb923c";
+    } else if (entry.type.includes("OB")) {
+      typeClass = "type-ob";
+    } else if (entry.type.includes("Liquidity") || entry.type.includes("EQ")) {
+      typeClass = "type-liq";
+    }
+
     card.innerHTML = `
       <div class="card-top">
         <div class="level-meta-left">
-          <span class="type-tag ${entry.type.includes('FVG') ? 'type-fvg' : entry.type.includes('OB') ? 'type-ob' : 'type-liq'}">${entry.timeframe}</span>
-          <span class="level-name-title">${entry.name}</span>
+          <span class="type-tag ${typeClass}">${entry.timeframe}</span>
+          <span class="level-name-title" style="${isHtfFvg ? `color: ${rangeColor};` : ''}">${entry.name}</span>
         </div>
         <span class="state-pill ${stateClass}">${entry.state}</span>
       </div>
       <div class="card-middle">
         <div class="level-stat-row">
-          <span>Target Range: <strong style="color: var(--text-main); font-family: var(--font-mono);">${rangeSpan}</strong></span>
+          <span>Target Range: <strong style="color: ${rangeColor}; font-family: var(--font-mono);">${rangeSpan}</strong></span>
           <span>Dist: <strong style="font-family: var(--font-mono); color: ${Math.abs(entry.distance) < 20 ? '#ffca28' : 'var(--text-main)'};">${distSign} (${entry.distance_pct}%)</strong></span>
         </div>
         <div class="state-reason-callout">
@@ -713,8 +731,13 @@ function renderSidebarData(analysis) {
       const tr = document.createElement("tr");
       const distSign = l.distance >= 0 ? `+${l.distance.toFixed(2)}` : l.distance.toFixed(2);
       const isNear = Math.abs(l.distance) < 20.0;
+      const isHtfFvg = (l.timeframe === "1D" || l.timeframe === "4H") && (l.type.includes("FVG") || l.name.includes("FVG"));
       let typeClass = "type-fvg";
-      if (l.type.includes("Liquidity")) typeClass = "type-liq";
+      let priceColor = "inherit";
+      if (isHtfFvg) {
+        typeClass = l.direction === "bullish" ? "type-fvg-bullish" : "type-fvg-bearish";
+        priceColor = l.direction === "bullish" ? "#00d2b4" : "#fb923c";
+      } else if (l.type.includes("Liquidity")) typeClass = "type-liq";
       else if (l.type.includes("OB")) typeClass = "type-ob";
       else if (l.type.includes("Psych")) typeClass = "type-psych";
 
@@ -729,8 +752,8 @@ function renderSidebarData(analysis) {
       }
 
       tr.innerHTML = `
-        <td><span class="type-tag ${typeClass}">${l.timeframe || ""}</span> <span style="font-weight: 500;" title="${l.score_reason || ''}">${l.name}</span></td>
-        <td style="font-weight: 600;">$${l.price.toFixed(2)}</td>
+        <td><span class="type-tag ${typeClass}">${l.timeframe || ""}</span> <span style="font-weight: 500; ${isHtfFvg ? `color: ${priceColor};` : ''}" title="${l.score_reason || ''}">${l.name}</span></td>
+        <td style="font-weight: 600; color: ${priceColor};">$${l.price.toFixed(2)}</td>
         <td class="${isNear ? "dist-near" : "dist-far"}">${distSign} (${l.distance_pct}%)</td>
         <td>${statusInfo}</td>
       `;
@@ -798,10 +821,15 @@ function renderSidebarData(analysis) {
     overlaps.forEach((ov) => {
       const div = document.createElement("div");
       div.className = "poi-callout";
+      const isBull = ov.direction === "bullish";
+      const ovColor = isBull ? "#00b49f" : "#f97316";
+      const ovBg = isBull ? "rgba(0, 180, 159, 0.12)" : "rgba(249, 115, 22, 0.12)";
+      div.style.borderLeftColor = ovColor;
+      div.style.background = ovBg;
       div.innerHTML = `
-        <strong>Overlapping ${ov.direction.toUpperCase()} Critical Section (POI)</strong>
+        <strong style="color: ${ovColor};">Overlapping ${ov.direction.toUpperCase()} Critical Section (POI)</strong>
         <p>Span: $${ov.overlap_bottom} - $${ov.overlap_top}<br>
-        50% Equilibrium Midpoint: <strong>$${ov.overlap_midpoint}</strong><br>
+        50% Equilibrium Midpoint: <strong style="color: ${isBull ? '#00d2b4' : '#fb923c'}; font-size: 12px;">$${ov.overlap_midpoint}</strong><br>
         Formed by: ${ov.htf_timeframe} & ${ov.ltf_timeframe} FVGs</p>
       `;
       overlapsBody.appendChild(div);
@@ -900,16 +928,24 @@ function renderFvgList(container, fvgs, tf) {
     div.style.padding = "6px 0";
     div.style.borderBottom = "1px solid rgba(35, 42, 56, 0.4)";
     div.style.fontSize = "11px";
-    const dirColor = f.direction === "bullish" ? "var(--green)" : "var(--red)";
+    const isHtf = tf === "1D" || tf === "4H";
+    const isBull = f.direction === "bullish";
+    const dirColor = isHtf
+      ? (isBull ? "#00b49f" : "#f97316")
+      : (isBull ? "var(--green)" : "var(--red)");
+    const poiColor = isHtf
+      ? (isBull ? "#00d2b4" : "#fb923c")
+      : "var(--accent-gold)";
+
     div.innerHTML = `
       <div style="display: flex; justify-content: space-between;">
-        <span style="font-weight: 600; color: ${dirColor};">${f.direction.toUpperCase()} FVG</span>
+        <span style="font-weight: 700; color: ${dirColor};">${f.direction.toUpperCase()} FVG (${tf})</span>
         <span style="font-size: 10px; color: ${f.mitigated ? "var(--text-dim)" : "var(--accent-gold)"};">
           ${f.mitigation_level}
         </span>
       </div>
       <div style="font-family: var(--font-mono); margin-top: 2px;">
-        Boundaries: $${f.bottom} - $${f.top} | <strong>50% POI: $${f.midpoint}</strong>
+        Boundaries: $${f.bottom} - $${f.top} | <strong style="color: ${poiColor};">50% POI: $${f.midpoint}</strong>
       </div>
       <div style="color: var(--text-dim); font-size: 10px; margin-top: 2px;">Created: ${f.start_ist || "N/A"}</div>
     `;

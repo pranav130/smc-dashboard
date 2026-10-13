@@ -34,6 +34,17 @@ TIMEFRAME_LIMITS = {
     "1M": 1500,   # 25.0 hours (exceeds 24h)
 }
 
+# Strict 24-hour minimum candle count per timeframe
+MIN_24H_CANDLES = {
+    "1D": 2,      # >= 48 hours
+    "4H": 7,      # >= 28 hours
+    "1H": 25,     # >= 25 hours
+    "30M": 50,    # >= 25 hours
+    "15M": 100,   # >= 25 hours
+    "5M": 300,    # >= 25 hours
+    "1M": 1450,   # >= 24.16 hours (1440 min = 24h)
+}
+
 class DeltaExchangeAdapter(BaseMarketDataAdapter):
     """
     Dedicated Market Data Adapter for Delta Exchange India.
@@ -139,8 +150,11 @@ class DeltaExchangeAdapter(BaseMarketDataAdapter):
         if symbol is None:
             symbol = DEFAULT_SYMBOL
         tf_key = timeframe.upper()
+        min_24h = MIN_24H_CANDLES.get(tf_key, 25)
         if limit is None:
             limit = TIMEFRAME_LIMITS.get(tf_key, 500)
+        else:
+            limit = max(limit, min_24h)
 
         res = TIMEFRAME_MAP.get(tf_key, timeframe.lower())
         tf_seconds = TIMEFRAME_SECONDS.get(res, 3600)
@@ -379,7 +393,7 @@ class DeltaExchangeAdapter(BaseMarketDataAdapter):
         while self.is_running and self.use_polling_fallback:
             try:
                 for tf in timeframes:
-                    await self.fetch_historical_candles(symbol, tf, limit=10)
+                    await self.fetch_historical_candles(symbol, tf, limit=TIMEFRAME_LIMITS.get(tf, 500))
                 self.last_successful_update = int(time.time())
                 self.connection_status = "Polling Fallback"
             except Exception as e:

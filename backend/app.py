@@ -16,7 +16,7 @@ from backend.config import (
     PRICE_SOURCE,
     IST_TZ,
 )
-from backend.adapters.delta_exchange import DeltaExchangeAdapter
+from backend.adapters.delta_exchange import DeltaExchangeAdapter, MIN_24H_CANDLES, TIMEFRAME_LIMITS
 from backend.smc.models import MarketDataStatus, Candle, AnalysisConfig
 from backend.smc.engine import SMCEngine
 
@@ -34,6 +34,7 @@ def broadcast_live_update(timeframe: str, candle: Candle):
 
     payload = {
         "event": "candle_update",
+        "type": "candle_update",
         "timeframe": timeframe,
         "candle": candle.model_dump(),
         "status": get_current_status(timeframe).model_dump()
@@ -133,6 +134,11 @@ async def get_status(timeframe: str = Query("1H")):
 async def get_candles(timeframe: str = Query("1H")):
     tf = timeframe.upper()
     candles = adapter.get_candles(tf)
+    min_count = MIN_24H_CANDLES.get(tf, 25)
+    if len(candles) < min_count:
+        candles = await adapter.fetch_historical_candles(
+            DEFAULT_SYMBOL, tf, limit=TIMEFRAME_LIMITS.get(tf, 500)
+        )
     return {
         "success": True,
         "symbol": DEFAULT_SYMBOL,
@@ -285,6 +291,7 @@ async def websocket_endpoint(websocket: WebSocket):
                         analysis = smc_engine.analyze_multi_timeframe(candles_by_tf, tf)
                         await websocket.send_json({
                             "event": "smc_sync",
+                            "type": "smc_sync",
                             "timeframe": tf,
                             "candles": [c.model_dump() for c in adapter.get_candles(tf)],
                             "analysis": analysis,

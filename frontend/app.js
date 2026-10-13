@@ -530,10 +530,13 @@ function drawSMCLevels(analysis) {
         activeLines.push(topBound, botBound);
       }
     });
+  }
 
-    // 1-Hour (1H) FVGs: Lighter tint (mint/peach)
-    if (currentTf !== "1D" && currentTf !== "4H") {
-      const h1List = (currentTf === "1H") ? (analysis.timeframe_fvgs || []) : (analysis.h1_fvgs || []);
+  // 3. Current Timeframe FVGs (Controlled by Current TF FVGs toggle)
+  if (layerToggles.ltfFvg) {
+    if (currentTf === "1H") {
+      // 1H FVGs ONLY appear on 1H timeframe: Lighter mint / peach tint
+      const h1List = analysis.timeframe_fvgs || analysis.h1_fvgs || [];
       h1List.slice(-4).forEach((f) => {
         if (!f.mitigated && !f.inverted) {
           const isBullish = f.direction === "bullish";
@@ -568,24 +571,43 @@ function drawSMCLevels(analysis) {
           activeLines.push(topBound, botBound);
         }
       });
-    }
-  }
+    } else if (currentTf !== "1D" && currentTf !== "4H") {
+      // Sub-Hourly Timeframes (30M, 15M, 5M, 1M): Only render that timeframe's own FVGs (never 1H FVGs)
+      (analysis.timeframe_fvgs || []).slice(-4).forEach((f) => {
+        if (!f.mitigated && !f.inverted) {
+          const isBullish = f.direction === "bullish";
+          const fvgColor = isBullish ? "#29b6f6" : "#e91e63";
+          const boundColor = isBullish ? "rgba(41, 182, 246, 0.35)" : "rgba(233, 30, 99, 0.35)";
+          const dirLabel = isBullish ? "Bullish" : "Bearish";
 
-  // 3. Current Sub-Hourly Timeframe FVGs (30M, 15M, 5M, 1M)
-  if (layerToggles.ltfFvg && currentTf !== "1D" && currentTf !== "4H" && currentTf !== "1H") {
-    (analysis.timeframe_fvgs || []).slice(-4).forEach((f) => {
-      if (!f.mitigated && !f.inverted) {
-        const midLine = candleSeries.createPriceLine({
-          price: f.midpoint,
-          color: f.direction === "bullish" ? "#29b6f6" : "#e91e63",
-          lineWidth: 1,
-          lineStyle: LightweightCharts.LineStyle.Dotted,
-          axisLabelVisible: true,
-          title: `${f.timeframe} FVG 50%`,
-        });
-        activeLines.push(midLine);
-      }
-    });
+          const midLine = candleSeries.createPriceLine({
+            price: f.midpoint,
+            color: fvgColor,
+            lineWidth: 1,
+            lineStyle: LightweightCharts.LineStyle.Dotted,
+            axisLabelVisible: true,
+            title: `${f.timeframe} ${dirLabel} FVG 50%`,
+          });
+          activeLines.push(midLine);
+
+          const topBound = candleSeries.createPriceLine({
+            price: f.top,
+            color: boundColor,
+            lineWidth: 1,
+            lineStyle: LightweightCharts.LineStyle.Dotted,
+            axisLabelVisible: false,
+          });
+          const botBound = candleSeries.createPriceLine({
+            price: f.bottom,
+            color: boundColor,
+            lineWidth: 1,
+            lineStyle: LightweightCharts.LineStyle.Dotted,
+            axisLabelVisible: false,
+          });
+          activeLines.push(topBound, botBound);
+        }
+      });
+    }
   }
 
   // 4. Order Blocks
@@ -1231,21 +1253,24 @@ function connectWebSocket() {
   ws.onmessage = (event) => {
     try {
       const msg = JSON.parse(event.data);
-      if (msg.type === "price_tick") {
+      const eventType = msg.type || msg.event;
+      if (eventType === "price_tick") {
         headerPrice.textContent = msg.price.toFixed(2);
-      } else if (msg.type === "candle_update") {
+      } else if (eventType === "candle_update") {
         if (msg.candle) {
-          candleSeries.update({
-            time: toLocalChartTime(msg.candle.time),
-            open: msg.candle.open,
-            high: msg.candle.high,
-            low: msg.candle.low,
-            close: msg.candle.close,
-          });
           headerPrice.textContent = msg.candle.close.toFixed(2);
           lastUpdateTs = Date.now() / 1000;
+          if (msg.timeframe === currentTf) {
+            candleSeries.update({
+              time: toLocalChartTime(msg.candle.time),
+              open: msg.candle.open,
+              high: msg.candle.high,
+              low: msg.candle.low,
+              close: msg.candle.close,
+            });
+          }
         }
-      } else if (msg.type === "analysis_update") {
+      } else if (eventType === "analysis_update") {
         currentAnalysis = msg.analysis;
         renderTerminalState(msg.analysis, null);
         renderActiveSetupCard(msg.analysis);
@@ -1253,6 +1278,33 @@ function connectWebSocket() {
         drawSMCLevels(msg.analysis);
         renderWatchlist(msg.analysis);
         renderDrawerData(msg.analysis);
+      } else if (eventType === "smc_sync") {
+        if (msg.timeframe === currentTf) {
+          currentAnalysis = msg.analysis;
+          renderTerminalState(msg.analysis, msg.status);
+          renderActiveSetupCard(msg.analysis);
+          clearOverlayLines();
+          drawSMCLevels(msg.analysis);
+          renderWatchlist(msg.analysis);
+          renderDrawerData(msg.analysis);
+          if (msg.candles && msg.candles.length) {
+            const chartCandles = msg.candles.map((c) => ({
+              time: toLocalChartTime(c.time),
+              open: c.open,
+              high: c.high,
+              low: c.low,
+              close: c.close,
+            }));
+            const chartVolumes = msg.candles.map((c) => ({
+              time: toLocalChartTime(c.time),
+              value: c.volume,
+              color: c.close >= c.open ? "rgba(0, 180, 159, 0.4)" : "rgba(242, 54, 69, 0.4)",
+            }));
+            candleSeries.setData(chartCandles);
+            volumeSeries.setData(chartVolumes);
+            chart.timeScale().fitContent();
+          }
+        }
       }
     } catch (e) {
       console.error("WS message parse error:", e);

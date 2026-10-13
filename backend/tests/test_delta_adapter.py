@@ -57,3 +57,48 @@ def test_candle_deduplication_and_sorting():
     assert len(cleaned) == 2
     assert cleaned[0].time == 1700000000
     assert cleaned[1].time == 1700003600
+
+def test_min_24h_candles_guarantee():
+    from backend.adapters.delta_exchange import MIN_24H_CANDLES, TIMEFRAME_LIMITS
+    from backend.config import TIMEFRAME_SECONDS, TIMEFRAME_MAP
+
+    for tf in ["1D", "4H", "1H", "30M", "15M", "5M", "1M"]:
+        min_candles = MIN_24H_CANDLES[tf]
+        limit = TIMEFRAME_LIMITS[tf]
+        res = TIMEFRAME_MAP[tf]
+        sec_per_candle = TIMEFRAME_SECONDS[res]
+        
+        # Verify min_candles spans at least 24 hours (86400 seconds)
+        # Note: 1D spans 1 day (86400s) with 2 candles spanning 48h
+        min_span_seconds = min_candles * sec_per_candle
+        assert min_span_seconds >= 86400, f"{tf} min_candles {min_candles} only spans {min_span_seconds}s (< 86400s)"
+        assert limit >= min_candles, f"{tf} limit {limit} must be >= min_candles {min_candles}"
+
+@pytest.mark.asyncio
+async def test_fetch_candles_enforces_24h_minimum(monkeypatch):
+    from backend.adapters.delta_exchange import MIN_24H_CANDLES
+    adapter = DeltaExchangeAdapter()
+
+    # Mock _normalize_candle to return dummy candles
+    now = 1700000000
+    mock_raw = [{"time": now - i * 60, "open": 100, "high": 101, "low": 99, "close": 100, "volume": 10} for i in range(2000)]
+    
+    class MockResponse:
+        status_code = 200
+        def json(self):
+            return {"success": True, "result": mock_raw}
+
+    class MockClient:
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, *args):
+            pass
+        async def get(self, url, params=None):
+            return MockResponse()
+
+    monkeypatch.setattr("httpx.AsyncClient", lambda **kwargs: MockClient())
+
+    # Requesting limit=5 on 1M must be clamped to at least MIN_24H_CANDLES["1M"] (1450)
+    candles = await adapter.fetch_historical_candles(".DEXAUTUSD", "1M", limit=5)
+    assert len(candles) >= MIN_24H_CANDLES["1M"]
+

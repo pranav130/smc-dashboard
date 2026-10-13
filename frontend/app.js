@@ -8,6 +8,7 @@
 
 // Global State
 let currentTf = "1H";
+let currentTheme = localStorage.getItem("smc_theme") || "dark";
 let chart = null;
 let candleSeries = null;
 let volumeSeries = null;
@@ -148,30 +149,31 @@ function initChart() {
   const container = document.getElementById("chart");
   container.innerHTML = "";
 
+  const isLight = currentTheme === "light";
   chart = LightweightCharts.createChart(container, {
     width: container.clientWidth,
     height: container.clientHeight,
     layout: {
-      background: { type: "solid", color: "#07090e" },
-      textColor: "#8b949e",
+      background: { type: "solid", color: isLight ? "#ffffff" : "#07090e" },
+      textColor: isLight ? "#475569" : "#8b949e",
       fontSize: 11,
       fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace',
     },
     grid: {
-      vertLines: { color: "#131922" },
-      horzLines: { color: "#131922" },
+      vertLines: { color: isLight ? "#f1f5f9" : "#131922" },
+      horzLines: { color: isLight ? "#f1f5f9" : "#131922" },
     },
     crosshair: {
       mode: LightweightCharts.CrosshairMode.Normal,
-      vertLine: { color: "#283344", width: 1, style: LightweightCharts.LineStyle.Dashed },
-      horzLine: { color: "#283344", width: 1, style: LightweightCharts.LineStyle.Dashed },
+      vertLine: { color: isLight ? "#cbd5e1" : "#283344", width: 1, style: LightweightCharts.LineStyle.Dashed },
+      horzLine: { color: isLight ? "#cbd5e1" : "#283344", width: 1, style: LightweightCharts.LineStyle.Dashed },
     },
     rightPriceScale: {
-      borderColor: "#1e2633",
+      borderColor: isLight ? "#e2e8f0" : "#1e2633",
       scaleMargins: { top: 0.08, bottom: 0.15 },
     },
     timeScale: {
-      borderColor: "#1e2633",
+      borderColor: isLight ? "#e2e8f0" : "#1e2633",
       timeVisible: true,
       secondsVisible: false,
       rightOffset: 12,
@@ -1890,8 +1892,66 @@ function setupEventListeners() {
   }, 5000);
 }
 
+function applyTheme(theme) {
+  currentTheme = theme;
+  localStorage.setItem("smc_theme", theme);
+  const isLight = theme === "light";
+
+  if (isLight) {
+    document.body.classList.add("light-theme");
+  } else {
+    document.body.classList.remove("light-theme");
+  }
+
+  const iconSun = document.getElementById("themeIconSun");
+  const iconMoon = document.getElementById("themeIconMoon");
+  const txt = document.getElementById("themeToggleText");
+  if (iconSun && iconMoon) {
+    iconSun.style.display = isLight ? "inline-block" : "none";
+    iconMoon.style.display = isLight ? "none" : "inline-block";
+  }
+  if (txt) {
+    txt.textContent = isLight ? "Dark" : "Light";
+  }
+
+  if (chart) {
+    chart.applyOptions({
+      layout: {
+        background: { type: "solid", color: isLight ? "#ffffff" : "#07090e" },
+        textColor: isLight ? "#475569" : "#8b949e",
+      },
+      grid: {
+        vertLines: { color: isLight ? "#f1f5f9" : "#131922" },
+        horzLines: { color: isLight ? "#f1f5f9" : "#131922" },
+      },
+      crosshair: {
+        vertLine: { color: isLight ? "#cbd5e1" : "#283344" },
+        horzLine: { color: isLight ? "#cbd5e1" : "#283344" },
+      },
+      rightPriceScale: {
+        borderColor: isLight ? "#e2e8f0" : "#1e2633",
+      },
+      timeScale: {
+        borderColor: isLight ? "#e2e8f0" : "#1e2633",
+      },
+    });
+  }
+}
+
+function setupThemeToggle() {
+  const btn = document.getElementById("btnThemeToggle");
+  if (btn) {
+    btn.addEventListener("click", () => {
+      const nextTheme = currentTheme === "dark" ? "light" : "dark";
+      applyTheme(nextTheme);
+    });
+  }
+  applyTheme(currentTheme);
+}
+
 // Initialize on DOM ready
 document.addEventListener("DOMContentLoaded", () => {
+  setupThemeToggle();
   initChart();
   setupDrawerNavigation();
   setupOverlaysMenu();

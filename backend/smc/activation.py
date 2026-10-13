@@ -23,10 +23,22 @@ from backend.smc.structure import _atr
 
 
 class AlertStore:
-    """In-memory alert manager with deduplication and acknowledgment tracking."""
-    def __init__(self):
+    """
+    Centralized in-memory alert manager with deduplication, configurable cooldown,
+    and acknowledgment tracking.
+    
+    Alert Policy:
+    - Routine approaching or testing of zones (APPROACHING, AT KEY LEVEL, REACTION DEVELOPING)
+      remain quietly tracked in the Watchlist cards without disruptive notifications.
+    - Active transitions (SETUP TO INSPECT, CHECKLIST REVIEW / ACTIVE, EXTREME, CRITICAL_RISK)
+      trigger persistent alerts.
+    - Escalation of severity breaks cooldown immediately.
+    """
+    def __init__(self, cooldown_seconds: int = 300):
         self._alerts: Dict[str, WatchlistAlert] = {}
         self._last_state_hash: Dict[str, str] = {}
+        self._last_alert_time: Dict[str, float] = {}
+        self.cooldown_seconds = cooldown_seconds
 
     def get_alerts(self, include_acknowledged: bool = False) -> List[WatchlistAlert]:
         alerts = list(self._alerts.values())
@@ -54,21 +66,38 @@ class AlertStore:
         evidence: List[str],
         timestamp: int,
         ist_time: str,
-        is_stale: bool
+        is_stale: bool,
+        is_extreme: bool = False,
+        only_actionable: bool = False
     ) -> Optional[WatchlistAlert]:
-        # Only alert on active attention states
-        if state in ["INACTIVE", "INVALIDATED / PASSED"]:
+        # Alert policy: optionally filter to actionable transitions only
+        if only_actionable:
+            notify_states = ["SETUP TO INSPECT", "CHECKLIST REVIEW"]
+            if state not in notify_states and not is_extreme:
+                return None
+
+        alert_severity_state = "EXTREME" if is_extreme else state
+        state_hash = f"{level_id}_{alert_severity_state}"
+        now = time.time()
+
+        last_hash = self._last_state_hash.get(level_id)
+        last_time = self._last_alert_time.get(level_id, 0)
+
+        # If already alerted for this exact state within cooldown window, suppress duplicate
+        if last_hash == state_hash and (now - last_time < self.cooldown_seconds):
             return None
 
-        state_hash = f"{level_id}_{state}"
-        if self._last_state_hash.get(level_id) == state_hash:
-            # Already alerted for this exact level state
-            return None
-
+        # Record new alert
         self._last_state_hash[level_id] = state_hash
-        alert_id = f"alt_{level_id}_{state.lower().replace(' ', '_')}_{timestamp}"
+        self._last_alert_time[level_id] = now
+        alert_id = f"alt_{level_id}_{alert_severity_state.lower().replace(' ', '_')}_{timestamp}"
 
-        alert_msg = f"[{state}] {level_name} ({timeframe}) — {evidence[0] if evidence else 'State activated'}"
+        prefix = "[EXTREME CONFLUENCE]" if is_extreme else (
+            "[ACTIVE SETUP]" if state == "CHECKLIST REVIEW" else (
+                "[SETUP TO INSPECT]" if state == "SETUP TO INSPECT" else f"[{state}]"
+            )
+        )
+        alert_msg = f"{prefix} {level_name} ({timeframe}) — {evidence[0] if evidence else 'State activated'}"
 
         alert = WatchlistAlert(
             id=alert_id,
@@ -362,7 +391,8 @@ def evaluate_level_activation(
         evidence=evidence,
         timestamp=int(time.time()),
         ist_time=(current_candles[-1].ist_time or "") if current_candles else "",
-        is_stale=is_stale
+        is_stale=is_stale,
+        only_actionable=True
     )
 
     return WatchlistEntry(

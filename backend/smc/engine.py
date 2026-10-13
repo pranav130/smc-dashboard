@@ -17,7 +17,7 @@ Orchestrates all calculations sequentially:
 """
 from typing import Dict, List, Any, Optional
 from backend.smc.models import (
-    Candle, MarketState, AnalysisConfig
+    Candle, MarketState, AnalysisConfig, TerminalState, ActiveSetupCardData
 )
 from backend.smc.fvg import calculate_fvgs, find_overlapping_fvgs
 from backend.smc.structure import (
@@ -63,6 +63,7 @@ class SMCEngine:
         h4_candles = candles_by_tf.get("4H", [])
         h1_candles = candles_by_tf.get("1H", [])
         m30_candles = candles_by_tf.get("30M", [])
+        m15_candles = candles_by_tf.get("15M", [])
 
         # Current market price
         current_price = current_candles[-1].close if current_candles else 0.0
@@ -93,6 +94,10 @@ class SMCEngine:
         # Trend states
         daily_trend_state = get_trend_state(daily_swings)
         h4_trend_state = get_trend_state(h4_swings)
+        h1_swings = find_swings(h1_candles, "1H", window=config.swing_window) if h1_candles else []
+        h1_trend_state = get_trend_state(h1_swings)
+        m15_swings = find_swings(m15_candles, "15M", window=config.swing_window) if m15_candles else []
+        m15_trend_state = get_trend_state(m15_swings)
         current_trend_state = get_trend_state(swings)
 
         # BOS & CHoCH
@@ -233,13 +238,170 @@ class SMCEngine:
         for entry in watchlist_entries:
             state_counts[entry.state] = state_counts.get(entry.state, 0) + 1
 
+        # 12. Synthesize Signal-First Terminal State Machine
+        bias_details = {
+            "1D": daily_trend_state.trend.upper(),
+            "4H": h4_trend_state.trend.upper(),
+            "1H": h1_trend_state.trend.upper(),
+            "15M": m15_trend_state.trend.upper()
+        }
+        has_bullish = any(t == "BULLISH" for t in bias_details.values())
+        has_bearish = any(t == "BEARISH" for t in bias_details.values())
+        if has_bullish and has_bearish:
+            market_bias = "MIXED"
+        elif has_bullish and not has_bearish:
+            market_bias = "BULLISH"
+        elif has_bearish and not has_bullish:
+            market_bias = "BEARISH"
+        else:
+            market_bias = "NEUTRAL"
+
+        # Risk / Data State
+        risk_reasons = []
+        if is_stale:
+            risk_state = "CRITICAL"
+            risk_reasons.append("Data feed stale (>60s) or disconnected")
+        elif opposing_warnings:
+            risk_state = "CAUTION"
+            risk_reasons.extend(opposing_warnings)
+        else:
+            risk_state = "NORMAL"
+
+        # Evaluate setup states and detect extreme/active/watch setups
+        terminal_setup_state = "IDLE"
+        extreme_reasons = []
+        candidate_setups = []
+
+        # Check overlapping HTF FVG bounds for extreme detection
+        htf_crit_ranges = []
+        for o_fvg in overlapping_htf_fvgs:
+            htf_crit_ranges.append((o_fvg.get("overlap_bottom", 0.0), o_fvg.get("overlap_top", 0.0)))
+
+        for entry in watchlist_entries:
+            # Check for extreme confluence
+            is_extreme = False
+            reasons = []
+            if entry.state in ["CHECKLIST REVIEW", "SETUP TO INSPECT"]:
+                # Check HTF overlap
+                if entry.top and entry.bottom:
+                    for crit_b, crit_t in htf_crit_ranges:
+                        if max(entry.bottom, crit_b) <= min(entry.top, crit_t):
+                            is_extreme = True
+                            reasons.append("Overlapping HTF FVG critical confluence")
+                            break
+                # Check PDH/PDL sweep + HTF trend confluence
+                has_sweep = any("sweep" in ev.lower() for ev in entry.evidence)
+                if has_sweep and ((entry.direction == "bullish" and daily_trend_state.trend == "bullish") or
+                                  (entry.direction == "bearish" and daily_trend_state.trend == "bearish")):
+                    is_extreme = True
+                    reasons.append("Liquidity sweep with HTF trend alignment")
+                if entry.score >= 85 and entry.state == "CHECKLIST REVIEW":
+                    is_extreme = True
+                    reasons.append("High confluence score (>=85) with full checklist")
+
+            if is_extreme:
+                t_state = "EXTREME"
+                extreme_reasons.extend(reasons)
+            elif entry.state == "CHECKLIST REVIEW":
+                t_state = "ACTIVE"
+            elif entry.state in ["SETUP TO INSPECT", "REACTION DEVELOPING", "AT KEY LEVEL", "APPROACHING"]:
+                t_state = "WATCH"
+            elif entry.state == "SWEPT / MITIGATED":
+                t_state = "INVALIDATED"
+            else:
+                t_state = "IDLE"
+
+            # Invalidation condition
+            if entry.direction == "bullish":
+                inval_str = f"H1 candle close below {entry.bottom:.2f}" if entry.bottom is not None else f"Close below {entry.price * 0.998:.2f}"
+            elif entry.direction == "bearish":
+                inval_str = f"H1 candle close above {entry.top:.2f}" if entry.top is not None else f"Close above {entry.price * 1.002:.2f}"
+            else:
+                inval_str = "Break of structure opposing setup"
+
+            # Target & Reward/Risk calculation from real levels
+            target_str = "N/A"
+            rr_str = "N/A"
+            if entry.direction == "bullish" and nearest_above:
+                target_str = f"{nearest_above.name} ({nearest_above.price:.2f})"
+                if entry.bottom and (entry.price - entry.bottom) > 0 and (nearest_above.price - entry.price) > 0:
+                    rr_val = (nearest_above.price - entry.price) / (entry.price - entry.bottom)
+                    rr_str = f"1:{rr_val:.1f}"
+            elif entry.direction == "bearish" and nearest_below:
+                target_str = f"{nearest_below.name} ({nearest_below.price:.2f})"
+                if entry.top and (entry.top - entry.price) > 0 and (entry.price - nearest_below.price) > 0:
+                    rr_val = (entry.price - nearest_below.price) / (entry.top - entry.price)
+                    rr_str = f"1:{rr_val:.1f}"
+
+            quality_label = "High Confluence" if is_extreme or entry.score >= 80 else ("Confirmed" if entry.state == "CHECKLIST REVIEW" else "Standard")
+            zone_str = f"{entry.bottom:.2f} - {entry.top:.2f}" if (entry.bottom is not None and entry.top is not None) else f"{entry.price:.2f}"
+
+            setup_card = ActiveSetupCardData(
+                id=entry.level_id,
+                name=entry.name,
+                direction=entry.direction if entry.direction in ["bullish", "bearish"] else "neutral",
+                timeframe=entry.timeframe,
+                state=t_state,
+                internal_state=entry.state,
+                price=entry.price,
+                top=entry.top,
+                bottom=entry.bottom,
+                zone_str=zone_str,
+                distance=entry.distance,
+                distance_pct=entry.distance_pct,
+                reason=entry.state_reason,
+                invalidation=inval_str,
+                target=target_str,
+                reward_risk=rr_str,
+                quality=quality_label,
+                checklist=entry.checklist,
+                opposing_warning=entry.opposing_zone_warning,
+                last_event_ist=entry.last_event_ist or "N/A"
+            )
+            candidate_setups.append((t_state, entry.score, abs(entry.distance), setup_card))
+
+        # Overall setup state determination
+        state_order = {"EXTREME": 5, "ACTIVE": 4, "WATCH": 3, "INVALIDATED": 2, "IDLE": 1}
+        if any(c[0] == "EXTREME" for c in candidate_setups):
+            terminal_setup_state = "EXTREME"
+        elif any(c[0] == "ACTIVE" for c in candidate_setups):
+            terminal_setup_state = "ACTIVE"
+        elif any(c[0] == "WATCH" for c in candidate_setups):
+            terminal_setup_state = "WATCH"
+        elif any(c[0] == "INVALIDATED" for c in candidate_setups):
+            terminal_setup_state = "INVALIDATED"
+        else:
+            terminal_setup_state = "IDLE"
+
+        # Prioritize single active setup card to display prominently
+        active_setup = None
+        if candidate_setups:
+            qualifying = [c for c in candidate_setups if c[0] in ["EXTREME", "ACTIVE", "WATCH"]]
+            if not qualifying:
+                qualifying = candidate_setups
+            qualifying.sort(key=lambda x: (state_order.get(x[0], 0), x[1], -x[2]), reverse=True)
+            active_setup = qualifying[0][3]
+
+        terminal_state = TerminalState(
+            market_bias=market_bias,
+            bias_details=bias_details,
+            setup_state=terminal_setup_state,
+            risk_state=risk_state,
+            active_setup=active_setup,
+            extreme_reasons=list(set(extreme_reasons)),
+            risk_reasons=risk_reasons
+        )
+
         return {
             "timeframe": tf,
             "current_price": current_price,
+            "terminal_state": terminal_state.model_dump(),
             "market_state": market_state.model_dump(),
             "trend_state": current_trend_state.model_dump(),
             "daily_trend_state": daily_trend_state.model_dump(),
             "h4_trend_state": h4_trend_state.model_dump(),
+            "h1_trend_state": h1_trend_state.model_dump(),
+            "m15_trend_state": m15_trend_state.model_dump(),
             "daily_fvgs": [f.model_dump() for f in daily_fvgs],
             "h4_fvgs": [f.model_dump() for f in h4_fvgs],
             "h1_fvgs": [f.model_dump() for f in h1_fvgs],

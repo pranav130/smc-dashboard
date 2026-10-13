@@ -3,27 +3,31 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SMC Key-Level Intelligence Dashboard | Delta Exchange India</title>
+  <title>XAUTUSD Terminal · Delta Exchange India | SMC Key-Level Intelligence</title>
   <link rel="stylesheet" href="/static/styles.css">
   <script src="/static/lightweight-charts.js"></script>
 </head>
 <body>
 
-  <!-- Header -->
-  <header>
-    <div class="logo-area">
-      <span class="logo-badge">DELTA INDIA</span>
-      <div>
-        <div class="app-title">
-          <span>XAUTUSD</span>
-          <span class="badge-contract" id="headerBadge">Spot Index</span>
-        </div>
-        <div class="app-subtitle">SMC Key-Level Intelligence · Discretionary Analysis Support</div>
+  <!-- 1. COMPACT INSTITUTIONAL HEADER -->
+  <header class="terminal-header">
+    <div class="header-left">
+      <div class="instrument-brand">
+        <span class="brand-badge">DELTA IN</span>
+        <span class="symbol-name">XAUTUSD</span>
+        <span class="badge-contract" id="headerBadge">Spot Index (.DEXAUTUSD)</span>
+      </div>
+      <div class="price-pill">
+        <span class="live-price" id="headerPrice">--.--</span>
+        <span class="currency-tag">USD</span>
+      </div>
+      <div class="source-clock" id="headerSourceTime" title="Exchange Source Timestamp">
+        --:--:-- IST
       </div>
     </div>
 
+    <!-- Center: Timeframe Selector (all 7 supported timeframes preserved) -->
     <div class="header-center">
-      <!-- Timeframe Selector -->
       <div class="timeframe-group">
         <button class="tf-btn" data-tf="1D">1D</button>
         <button class="tf-btn" data-tf="4H">4H</button>
@@ -33,128 +37,157 @@
         <button class="tf-btn" data-tf="5M">5M</button>
         <button class="tf-btn" data-tf="1M">1M</button>
       </div>
-
-      <!-- Current Price Display -->
-      <div class="price-display">
-        <span class="current-price" id="headerPrice">--.--</span>
-        <span class="price-unit">USD</span>
-      </div>
     </div>
 
-    <div class="header-actions">
-      <div id="connectionPill" class="conn-pill Connected">
+    <!-- Right: Connection Status & Controls -->
+    <div class="header-right">
+      <div id="connectionPill" class="conn-pill Connected" title="Real-time Feed Status">
         <span class="pulse-dot"></span>
-        <span id="connStatusText">Connected</span>
+        <span id="connStatusText">LIVE</span>
       </div>
-      <button class="btn-refresh" id="btnRefresh" title="Fetch latest historical candles from Delta India">
+      <button class="btn-tool" id="btnToggleDetails" title="Toggle Instrument Metadata & Feed Diagnostics">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+        <span id="detailsBtnText">Details ▾</span>
+      </button>
+      <button class="btn-tool btn-sync" id="btnRefresh" title="Resync Historical Candles from Delta Exchange India">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
-        Sync Data
+        Sync
       </button>
     </div>
   </header>
 
-  <!-- Market Overview Bar (Descriptive State & Key Bias) -->
-  <div class="market-overview-bar">
-    <div class="overview-item">
-      <span class="overview-label">Daily Structure:</span>
-      <span class="overview-val" id="ovDailyTrend">--</span>
+  <!-- 2. COLLAPSIBLE DETAILS SECTION (Hidden by default to maximize chart screen) -->
+  <section class="collapsible-details" id="collapsibleDetails" style="display: none;">
+    <div class="details-grid">
+      <div class="detail-cell">
+        <span class="detail-label">Instrument</span>
+        <span class="detail-val" id="statInstrument">Tether Gold Spot Index (.DEXAUTUSD)</span>
+      </div>
+      <div class="detail-cell">
+        <span class="detail-label">Contract Specs</span>
+        <span class="detail-val" id="statContract">Spot Price Index (1 oz Benchmark)</span>
+      </div>
+      <div class="detail-cell">
+        <span class="detail-label">Exchange Feed</span>
+        <span class="detail-val" id="statProvider">Delta Exchange India</span>
+      </div>
+      <div class="detail-cell">
+        <span class="detail-label">Timeframe</span>
+        <span class="detail-val" id="statTimeframe">1H</span>
+      </div>
+      <div class="detail-cell">
+        <span class="detail-label">Basis vs Spot</span>
+        <span class="detail-val" id="statBasis">0.00% (Spot Index Reference)</span>
+      </div>
+      <div class="detail-cell">
+        <span class="detail-label">Last Candle IST</span>
+        <span class="detail-val" id="statLastCandle">--</span>
+      </div>
+      <div class="detail-cell">
+        <span class="detail-label">Candle State</span>
+        <span class="detail-val confirmed-badge" id="statCandleState">Confirmed</span>
+      </div>
+      <div class="detail-cell">
+        <span class="detail-label">Stream Mode</span>
+        <span class="detail-val stream-mode-val" id="statStreamMode">WebSocket Live</span>
+      </div>
+      <div class="detail-cell">
+        <span class="detail-label">Last Engine Update</span>
+        <span class="detail-val" id="statLastUpdate">--</span>
+      </div>
     </div>
-    <div class="overview-item">
-      <span class="overview-label">4H Structure:</span>
-      <span class="overview-val" id="ovH4Trend">--</span>
-    </div>
-    <div class="overview-item">
-      <span class="overview-label">Dealing Range:</span>
-      <span class="overview-val" id="ovDealingRange">--</span>
-    </div>
-    <div class="overview-item">
-      <span class="overview-label">Nearest Overhead:</span>
-      <span class="overview-val overhead" id="ovNearestAbove">--</span>
-    </div>
-    <div class="overview-item">
-      <span class="overview-label">Nearest Support:</span>
-      <span class="overview-val support" id="ovNearestBelow">--</span>
-    </div>
-    <div class="overview-item">
-      <span class="overview-label">OTE Status:</span>
-      <span class="overview-val" id="ovOteStatus">Outside OTE</span>
-    </div>
-  </div>
+  </section>
 
-  <!-- Data Status & Basis Disclosure Panel -->
-  <div class="data-status-panel">
-    <div class="status-left">
-      <div class="status-item">
-        <span class="status-label">Instrument:</span>
-        <span class="status-val" id="statInstrument">Tether Gold Spot Index (.DEXAUTUSD)</span>
-      </div>
-      <div class="status-item">
-        <span class="status-label">Contract:</span>
-        <span class="status-val" id="statContract">Spot Price Index (1 oz Benchmark)</span>
-      </div>
-      <div class="status-item">
-        <span class="status-label">Provider:</span>
-        <span class="status-val" id="statProvider">Delta Exchange India</span>
-      </div>
-      <div class="status-item">
-        <span class="status-label">Timeframe:</span>
-        <span class="status-val" id="statTimeframe">1H</span>
-      </div>
-      <div class="status-item">
-        <span class="status-label">Basis vs Spot:</span>
-        <span class="status-val" id="statBasis" style="color: var(--text-dim);" title="Tracking Delta Exchange India spot gold index.">0.00% (Spot Index Reference)</span>
+  <!-- 3. SIGNAL SUMMARY BAR (1-2 Second Institutional Scanability) -->
+  <section class="signal-summary-bar">
+    <!-- Region 1: Market Bias -->
+    <div class="summary-region bias-region">
+      <div class="bias-pill" id="marketBiasPill">BIAS: NEUTRAL</div>
+      <div class="tf-bias-group" id="tfBiasIndicators">
+        <span class="tf-badge" data-tf="1D">1D: --</span>
+        <span class="tf-badge" data-tf="4H">4H: --</span>
+        <span class="tf-badge" data-tf="1H">1H: --</span>
+        <span class="tf-badge" data-tf="15M">15M: --</span>
       </div>
     </div>
 
-    <div class="status-right">
-      <div class="status-item">
-        <span class="status-label">Last Candle (IST):</span>
-        <span class="status-val" id="statLastCandle">--</span>
-      </div>
-      <div class="status-item">
-        <span class="status-label">Candle State:</span>
-        <span id="statCandleState" class="confirmed-badge">Confirmed</span>
-      </div>
-      <div class="status-item">
-        <span class="status-label">Last Update:</span>
-        <span class="status-val" id="statLastUpdate">--</span>
-      </div>
-      <div class="status-item">
-        <span class="status-label">Stream Mode:</span>
-        <span class="status-val" id="statStreamMode" style="color: var(--blue);">WebSocket Live</span>
-      </div>
-    </div>
-  </div>
+    <div class="summary-divider"></div>
 
-  <!-- Warning Banner for stale/delayed data or opposing zones -->
+    <!-- Region 2: Setup State -->
+    <div class="summary-region setup-region">
+      <div class="setup-pill idle" id="terminalSetupPill">SETUP: IDLE</div>
+      <div class="summary-meta" id="terminalSetupDesc">No qualifying setup under active surveillance</div>
+    </div>
+
+    <div class="summary-divider"></div>
+
+    <!-- Region 3: Risk & Data Health -->
+    <div class="summary-region risk-region">
+      <div class="risk-pill normal" id="terminalRiskPill">RISK: NORMAL</div>
+      <div class="summary-meta" id="terminalRiskDesc">Live verified market data</div>
+    </div>
+  </section>
+
+  <!-- Warning Banner for stale/delayed feed or opposing HTF zones -->
   <div class="warning-banner" id="warningBanner" style="display: none;">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-    <span id="warningText">Market data stream notice.</span>
+    <span id="warningText">Notice: Market condition warning.</span>
   </div>
 
-  <!-- Main Content Layout -->
-  <div class="main-content">
+  <!-- 4. ACTIVE SETUP CARD (Shown prominently when ACTIVE, EXTREME, or actionable WATCH; quiet single-line status when IDLE) -->
+  <section class="active-setup-container" id="activeSetupContainer">
+    <div class="active-setup-card idle-card" id="activeSetupCard">
+      <div class="idle-message">
+        <span class="idle-indicator"></span>
+        <span id="idleText">Market surveillance idle — monitoring SMC structural key levels for qualified trade setups</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5. MAIN WORKSPACE: CHART + NARROW ICON RAIL + SLIDE DRAWER -->
+  <div class="main-workspace" id="mainWorkspace">
     
-    <!-- Chart Panel -->
-    <div class="chart-panel">
-      <!-- Dedicated Chart Overlays Toolbar Bar (Above Chart Canvas) -->
+    <!-- Chart Panel (>85% width by default) -->
+    <main class="chart-panel">
+      <!-- Chart Toolbar (Compact Overlays Dropdown + Fullscreen) -->
       <div class="chart-toolbar-bar">
         <div class="toolbar-left">
-          <div class="toolbar-section-title">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
-            Overlays:
-          </div>
-          <div class="toolbar-toggles-row">
-            <label class="toggle-pill" title="Higher Timeframe Fair Value Gaps (Daily & 4H) — Peacock Green: Bullish | Orange: Bearish"><input type="checkbox" id="togHtfFvg" checked> <span class="dot htf-fvg"></span> HTF FVGs</label>
-            <label class="toggle-pill" title="Current Timeframe Fair Value Gaps"><input type="checkbox" id="togLtfFvg" checked> <span class="dot ltf-fvg"></span> Current FVGs</label>
-            <label class="toggle-pill" title="Strict ICT Order Blocks"><input type="checkbox" id="togOrderBlocks" checked> <span class="dot ob"></span> Order Blocks</label>
-            <label class="toggle-pill" title="Previous Day/Week High & Low + Equal Highs/Lows"><input type="checkbox" id="togLiquidity" checked> <span class="dot liq"></span> PDH/PDL/EQ</label>
-            <label class="toggle-pill" title="Multi-touch Validated Trendlines"><input type="checkbox" id="togTrendlines" checked> <span class="dot tl"></span> Trendlines</label>
-            <label class="toggle-pill" title="Institutional Psychological 20s and 80s Levels"><input type="checkbox" id="togPsych" checked> <span class="dot psych"></span> 20/80 Levels</label>
-            <label class="toggle-pill" title="Swing Structure and Valid Break of Structure (>=40%)"><input type="checkbox" id="togSwings" checked> <span class="dot swings"></span> Swings & BoS</label>
-            <label class="toggle-pill" title="Toggle Volume Histogram on/off"><input type="checkbox" id="togVolume" checked> <span class="dot vol"></span> Volume</label>
+          <!-- Overlays Dropdown Button -->
+          <div class="dropdown-wrapper">
+            <button class="btn-dropdown" id="btnOverlaysMenu" title="Configure Chart Overlays">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+              <span>Overlays ▾</span>
+            </button>
+            <div class="dropdown-popover" id="overlaysPopover" style="display: none;">
+              <div class="popover-title">Chart SMC Overlays</div>
+              <label class="toggle-pill" title="Higher Timeframe Fair Value Gaps (Daily & 4H) — Peacock Green: Bullish | Orange: Bearish">
+                <input type="checkbox" id="togHtfFvg" checked> <span class="dot htf-fvg"></span> HTF FVGs (1D/4H)
+              </label>
+              <label class="toggle-pill" title="Current Timeframe Fair Value Gaps">
+                <input type="checkbox" id="togLtfFvg" checked> <span class="dot ltf-fvg"></span> Current TF FVGs
+              </label>
+              <label class="toggle-pill" title="Strict ICT Order Blocks">
+                <input type="checkbox" id="togOrderBlocks" checked> <span class="dot ob"></span> Order Blocks
+              </label>
+              <label class="toggle-pill" title="Previous Day/Week High & Low + Equal Highs/Lows">
+                <input type="checkbox" id="togLiquidity" checked> <span class="dot liq"></span> PDH/PDL/EQ
+              </label>
+              <label class="toggle-pill" title="Multi-touch Validated Trendlines">
+                <input type="checkbox" id="togTrendlines" checked> <span class="dot tl"></span> Trendlines
+              </label>
+              <label class="toggle-pill" title="Institutional Psychological 20s and 80s Levels">
+                <input type="checkbox" id="togPsych" checked> <span class="dot psych"></span> 20/80 Levels
+              </label>
+              <label class="toggle-pill" title="Swing Structure and Valid Break of Structure (>=40%)">
+                <input type="checkbox" id="togSwings" checked> <span class="dot swings"></span> Swings & BoS
+              </label>
+              <label class="toggle-pill" title="Toggle Volume Histogram on/off">
+                <input type="checkbox" id="togVolume" checked> <span class="dot vol"></span> Volume
+              </label>
+            </div>
           </div>
         </div>
+
         <div class="toolbar-right">
           <button class="btn-fullscreen" id="btnFullscreen" title="Toggle Full Screen (or press 'F')">
             <svg id="fsIconExpand" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
@@ -172,47 +205,45 @@
             <span class="legend-ohlc" id="legendOHLC">O: -- H: -- L: -- C: -- V: --</span>
           </div>
         </div>
-
         <div id="chart"></div>
       </div>
-    </div>
+    </main>
 
-    <!-- SMC Intelligence Sidebar -->
-    <div class="sidebar">
-      <div class="sidebar-tabs">
-        <button class="tab-btn active" data-tab="tab-watchlist">Watchlist & Alerts <span class="badge-alert-count" id="watchlistAlertBadge" style="display: none;">0</span></button>
-        <button class="tab-btn" data-tab="tab-levels">Key Levels</button>
-        <button class="tab-btn" data-tab="tab-fvg">FVGs & POI</button>
-        <button class="tab-btn" data-tab="tab-structure">Structure</button>
-        <button class="tab-btn" data-tab="tab-strategy">Strategy</button>
+    <!-- Slide-out Drawer (Hidden by default; slides over or pins cleanly) -->
+    <aside class="slide-drawer" id="slideDrawer" style="display: none;">
+      <div class="drawer-header">
+        <div class="drawer-title" id="drawerTitle">Active Alerts</div>
+        <div class="drawer-actions">
+          <button class="drawer-pin-btn" id="btnPinDrawer" title="Pin drawer to keep open alongside chart">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 3l5 5L18 11l-3-3L7 16l-3 3 1-5 8-8z"/><path d="M12 12l-7 7"/></svg>
+            <span id="pinBtnText">Pin</span>
+          </button>
+          <button class="drawer-close-btn" id="btnCloseDrawer" title="Close drawer">✕</button>
+        </div>
       </div>
 
-      <div class="sidebar-content">
-
-        <!-- Tab 0: Trade-Readiness Watchlist & Alerts -->
-        <div class="tab-pane active" id="tab-watchlist">
-          <!-- Active Alerts Drawer -->
+      <div class="drawer-body">
+        <!-- Pane: Alerts -->
+        <div class="drawer-pane" id="pane-alerts">
           <div id="alertsDrawerArea"></div>
+        </div>
 
-          <!-- Watchlist Filter Chips -->
+        <!-- Pane: Setups (Watchlist) -->
+        <div class="drawer-pane" id="pane-setups" style="display: none;">
           <div class="watchlist-filters">
-            <button class="filter-btn active" data-filter="all">All Levels (<span id="filterAllCount">0</span>)</button>
-            <button class="filter-btn" data-filter="active">Active & In-Zone (<span id="filterActiveCount">0</span>)</button>
-            <button class="filter-btn" data-filter="setups">Setups & Review (<span id="filterSetupsCount">0</span>)</button>
+            <button class="filter-btn active" data-filter="all">All (<span id="filterAllCount">0</span>)</button>
+            <button class="filter-btn" data-filter="active">Active (<span id="filterActiveCount">0</span>)</button>
+            <button class="filter-btn" data-filter="setups">Setups (<span id="filterSetupsCount">0</span>)</button>
           </div>
-
-          <!-- Surveillance Cards List -->
           <div id="watchlistCardsContainer">
-            <div style="color: var(--text-dim); font-size: 11px; text-align: center; padding: 16px;">Scanning key levels for activation states...</div>
+            <div class="empty-state">Scanning key levels for qualified activation states...</div>
           </div>
         </div>
 
-        <!-- Tab 1: Key Levels by Distance & Score -->
-        <div class="tab-pane" id="tab-levels" style="display: none;">
-          <!-- Opposing HTF Warnings -->
+        <!-- Pane: Key Levels -->
+        <div class="drawer-pane" id="pane-levels" style="display: none;">
           <div id="opposingAlertsArea"></div>
-
-          <div class="card">
+          <div class="drawer-card">
             <div class="card-header">
               <span class="card-title">Prioritized SMC Key Levels</span>
               <span class="badge-count" id="levelsCount">0</span>
@@ -223,30 +254,28 @@
                   <tr>
                     <th>Level / POI</th>
                     <th>Price</th>
-                    <th>Dist ($)</th>
-                    <th>Score / Status</th>
+                    <th>Dist</th>
+                    <th>Score</th>
                   </tr>
                 </thead>
                 <tbody id="levelsTableBody">
-                  <tr><td colspan="4" style="text-align: center; color: var(--text-dim); padding: 16px;">Loading levels...</td></tr>
+                  <tr><td colspan="4" class="empty-state">Loading levels...</td></tr>
                 </tbody>
               </table>
             </div>
           </div>
 
-          <!-- Order Blocks Summary -->
-          <div class="card">
+          <div class="drawer-card">
             <div class="card-header">
               <span class="card-title">Active Order Blocks</span>
               <span class="badge-count" id="obCount">0</span>
             </div>
             <div class="card-body" id="obBody">
-              <div style="color: var(--text-dim); font-size: 11px;">Scanning for confirmed order blocks...</div>
+              <div class="empty-state">Scanning for confirmed order blocks...</div>
             </div>
           </div>
 
-          <!-- Psychological 20s & 80s Levels -->
-          <div class="card">
+          <div class="drawer-card">
             <div class="card-header">
               <span class="card-title">Psychological Round Numbers (20s & 80s)</span>
             </div>
@@ -265,19 +294,19 @@
           </div>
         </div>
 
-        <!-- Tab 2: Fair Value Gaps & Critical Sections -->
-        <div class="tab-pane" id="tab-fvg" style="display: none;">
-          <div class="card">
+        <!-- Pane: FVGs & POI -->
+        <div class="drawer-pane" id="pane-fvg" style="display: none;">
+          <div class="drawer-card">
             <div class="card-header">
               <span class="card-title">Overlapping HTF Critical Sections (POI)</span>
               <span class="badge-count" id="overlapsCount">0</span>
             </div>
             <div class="card-body" id="overlapsBody">
-              <div style="color: var(--text-dim); font-size: 11px;">Scanning for overlapping Daily & 4H FVGs...</div>
+              <div class="empty-state">Scanning for overlapping Daily & 4H FVGs...</div>
             </div>
           </div>
 
-          <div class="card">
+          <div class="drawer-card">
             <div class="card-header">
               <span class="card-title">Daily (1D) Fair Value Gaps</span>
               <span class="badge-count" id="dailyFvgCount">0</span>
@@ -285,7 +314,7 @@
             <div class="card-body" id="dailyFvgBody"></div>
           </div>
 
-          <div class="card">
+          <div class="drawer-card">
             <div class="card-header">
               <span class="card-title">4-Hour (4H) Fair Value Gaps</span>
               <span class="badge-count" id="h4FvgCount">0</span>
@@ -293,7 +322,7 @@
             <div class="card-body" id="h4FvgBody"></div>
           </div>
 
-          <div class="card">
+          <div class="drawer-card">
             <div class="card-header">
               <span class="card-title">1-Hour (1H) Fair Value Gaps</span>
               <span class="badge-count" id="h1FvgCount">0</span>
@@ -302,37 +331,33 @@
           </div>
         </div>
 
-        <!-- Tab 3: Market Structure & Liquidity -->
-        <div class="tab-pane" id="tab-structure" style="display: none;">
-          <!-- Premium / Discount Overview -->
-          <div class="card">
+        <!-- Pane: Structure -->
+        <div class="drawer-pane" id="pane-structure" style="display: none;">
+          <div class="drawer-card">
             <div class="card-header">
               <span class="card-title">Dealing Range & Premium / Discount</span>
             </div>
             <div class="card-body" id="premDiscBody">
-              <div style="font-size: 11px; color: var(--text-dim);">Evaluating range...</div>
+              <div class="empty-state">Evaluating range...</div>
             </div>
           </div>
 
-          <!-- Trendlines -->
-          <div class="card">
+          <div class="drawer-card">
             <div class="card-header">
-              <span class="card-title">Trendlines (1H / 30M)</span>
+              <span class="card-title">Trendlines (1H / 30M / 15M)</span>
               <span class="badge-count" id="tlCount">0</span>
             </div>
             <div class="card-body" id="trendlineBody"></div>
           </div>
 
-          <!-- Liquidity Levels & Sweeps -->
-          <div class="card">
+          <div class="drawer-card">
             <div class="card-header">
               <span class="card-title">Liquidity Levels & Sweeps</span>
             </div>
             <div class="card-body" id="liquidityBody"></div>
           </div>
 
-          <!-- Break of Structure & CHoCH -->
-          <div class="card">
+          <div class="drawer-card">
             <div class="card-header">
               <span class="card-title">Structure Breaks (BoS & CHoCH)</span>
               <span class="badge-count" id="bosCount">0</span>
@@ -341,8 +366,8 @@
           </div>
         </div>
 
-        <!-- Tab 4: Strategy Rules from User's Playbook -->
-        <div class="tab-pane" id="tab-strategy" style="display: none;">
+        <!-- Pane: Strategy Playbook -->
+        <div class="drawer-pane" id="pane-strategy" style="display: none;">
           <div class="poi-callout">
             <strong>Critical Section (CS) / POI:</strong>
             <p>• 50% or deeper area of an HTF FVG (Equilibrium midpoint).<br>• Overlapping HTF FVGs.<br>• Previous Day High/Low Liquidity Sweep.</p>
@@ -353,7 +378,7 @@
           </div>
           <div class="poi-callout">
             <strong>Structure Rules:</strong>
-            <p>• BoS is valid <strong>ONLY when there is at least 40% retracement</strong>.<br>• Confirm BoS on <strong>30-minute timeframe or higher</strong>.<br>• Avoid trades when an opposing HTF FVG is present.<br>• Trail Stop Loss using 30min FVGs.</p>
+            <p>• BoS is valid <strong>ONLY when there is >= 40% retracement</strong>.<br>• Confirm BoS on <strong>30-minute timeframe or higher</strong>.<br>• Avoid trades when an opposing HTF FVG is present.<br>• Trail Stop Loss using 30min FVGs.</p>
           </div>
           <div class="poi-callout">
             <strong>Psychological Numbers:</strong>
@@ -361,12 +386,34 @@
           </div>
           <div class="poi-callout" style="border-left-color: var(--blue);">
             <strong>Analysis Support Notice:</strong>
-            <p>This dashboard is a market-analysis decision-support tool. It computes verified market levels and descriptive market states. It does not issue automated buy/sell signals.</p>
+            <p>This dashboard is a market-analysis decision-support terminal. It computes verified market levels and descriptive market states. It does not issue automated buy/sell signals.</p>
           </div>
         </div>
-
       </div>
-    </div>
+    </aside>
+
+    <!-- Collapsed Narrow Icon Rail on the Far Right Edge (48px) -->
+    <nav class="icon-rail" id="iconRail">
+      <button class="rail-btn" data-pane="pane-alerts" title="Active Alerts">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+        <span class="rail-badge" id="railAlertBadge" style="display: none;">0</span>
+      </button>
+      <button class="rail-btn" data-pane="pane-setups" title="Trade-Readiness Watchlist">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+      </button>
+      <button class="rail-btn" data-pane="pane-levels" title="SMC Key Levels & Order Blocks">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg>
+      </button>
+      <button class="rail-btn" data-pane="pane-fvg" title="Fair Value Gaps & Overlaps">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/></svg>
+      </button>
+      <button class="rail-btn" data-pane="pane-structure" title="Market Structure & Swings">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+      </button>
+      <button class="rail-btn" data-pane="pane-strategy" title="Strategy Playbook & Rules">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      </button>
+    </nav>
 
   </div>
 

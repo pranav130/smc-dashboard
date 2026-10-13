@@ -2,7 +2,7 @@
 SMC Dashboard — Pydantic data models.
 All models are pure-Python / Pydantic; no pandas/numpy dependency here.
 """
-from typing import Optional, List, Literal
+from typing import Optional, List, Literal, Dict, Any
 from pydantic import BaseModel, Field
 
 
@@ -409,3 +409,51 @@ class WatchlistAlert(BaseModel):
     ist_time: Optional[str] = ""
     acknowledged: bool = False
     is_stale_suppressed: bool = False
+
+
+# ---------------------------------------------------------------------------
+# Signal-First Trading Command Center: Unified Terminal State Machine
+# ---------------------------------------------------------------------------
+
+TerminalSignalState = Literal["IDLE", "WATCH", "ACTIVE", "EXTREME", "INVALIDATED", "CRITICAL_RISK"]
+MarketBiasState = Literal["BULLISH", "BEARISH", "MIXED", "NEUTRAL"]
+RiskDataState = Literal["NORMAL", "CAUTION", "CRITICAL"]
+
+
+class ActiveSetupCardData(BaseModel):
+    """Clean institutional active setup summary card."""
+    id: str
+    name: str
+    direction: Literal["bullish", "bearish", "neutral"]
+    timeframe: str
+    state: TerminalSignalState
+    internal_state: ActivationState
+    price: float
+    top: Optional[float] = None
+    bottom: Optional[float] = None
+    zone_str: str = ""
+    distance: float = 0.0
+    distance_pct: float = 0.0
+    reason: str = ""
+    invalidation: str = ""
+    target: str = "N/A"
+    reward_risk: str = "N/A"
+    quality: str = "Standard"
+    checklist: List[ChecklistItem] = Field(default_factory=list)
+    opposing_warning: Optional[str] = None
+    last_event_ist: Optional[str] = "N/A"
+
+
+class TerminalState(BaseModel):
+    """
+    Unified signal-first terminal state machine shared by chart,
+    signal summary bar, setup cards, and alert engine.
+    """
+    market_bias: MarketBiasState = "NEUTRAL"
+    bias_details: Dict[str, str] = Field(default_factory=dict)
+    setup_state: TerminalSignalState = "IDLE"
+    risk_state: RiskDataState = "NORMAL"
+    active_setup: Optional[ActiveSetupCardData] = None
+    extreme_reasons: List[str] = Field(default_factory=list)
+    risk_reasons: List[str] = Field(default_factory=list)
+

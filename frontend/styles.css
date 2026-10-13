@@ -287,11 +287,25 @@ header {
   border-bottom: 1px solid var(--border);
   display: flex;
   align-items: center;
+  justify-content: space-between;
   padding: 0 14px;
   gap: 12px;
   flex-shrink: 0;
   overflow-x: auto;
   user-select: none;
+}
+
+.toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
 }
 
 .toolbar-section-title {
@@ -311,6 +325,45 @@ header {
   align-items: center;
   gap: 8px;
   flex-wrap: nowrap;
+}
+
+.btn-fullscreen {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #161c27;
+  border: 1px solid var(--border);
+  color: var(--text-main);
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.btn-fullscreen:hover {
+  background: #202738;
+  border-color: var(--accent-gold);
+  color: var(--accent-gold);
+}
+
+/* Fullscreen Chart Mode */
+.chart-panel.is-fullscreen {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  z-index: 99999 !important;
+  background: #090c10 !important;
+}
+
+.chart-panel.is-fullscreen .chart-container {
+  height: calc(100vh - 38px) !important;
 }
 
 .toggle-pill {
@@ -368,6 +421,7 @@ header {
 #chart {
   width: 100%;
   height: 100%;
+  background: var(--bg-dark);
 }
 
 .chart-overlay-legend {

@@ -136,19 +136,28 @@
     <div class="chart-panel">
       <!-- Dedicated Chart Overlays Toolbar Bar (Above Chart Canvas) -->
       <div class="chart-toolbar-bar">
-        <div class="toolbar-section-title">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
-          Overlays:
+        <div class="toolbar-left">
+          <div class="toolbar-section-title">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+            Overlays:
+          </div>
+          <div class="toolbar-toggles-row">
+            <label class="toggle-pill" title="Higher Timeframe Fair Value Gaps (Daily & 4H)"><input type="checkbox" id="togHtfFvg" checked> <span class="dot htf-fvg"></span> HTF FVGs</label>
+            <label class="toggle-pill" title="Current Timeframe Fair Value Gaps"><input type="checkbox" id="togLtfFvg" checked> <span class="dot ltf-fvg"></span> Current FVGs</label>
+            <label class="toggle-pill" title="Strict ICT Order Blocks"><input type="checkbox" id="togOrderBlocks" checked> <span class="dot ob"></span> Order Blocks</label>
+            <label class="toggle-pill" title="Previous Day/Week High & Low + Equal Highs/Lows"><input type="checkbox" id="togLiquidity" checked> <span class="dot liq"></span> PDH/PDL/EQ</label>
+            <label class="toggle-pill" title="Multi-touch Validated Trendlines"><input type="checkbox" id="togTrendlines" checked> <span class="dot tl"></span> Trendlines</label>
+            <label class="toggle-pill" title="Institutional Psychological 20s and 80s Levels"><input type="checkbox" id="togPsych" checked> <span class="dot psych"></span> 20/80 Levels</label>
+            <label class="toggle-pill" title="Swing Structure and Valid Break of Structure (>=40%)"><input type="checkbox" id="togSwings" checked> <span class="dot swings"></span> Swings & BoS</label>
+            <label class="toggle-pill" title="Toggle Volume Histogram on/off"><input type="checkbox" id="togVolume" checked> <span class="dot vol"></span> Volume</label>
+          </div>
         </div>
-        <div class="toolbar-toggles-row">
-          <label class="toggle-pill" title="Higher Timeframe Fair Value Gaps (Daily & 4H)"><input type="checkbox" id="togHtfFvg" checked> <span class="dot htf-fvg"></span> HTF FVGs</label>
-          <label class="toggle-pill" title="Current Timeframe Fair Value Gaps"><input type="checkbox" id="togLtfFvg" checked> <span class="dot ltf-fvg"></span> Current FVGs</label>
-          <label class="toggle-pill" title="Strict ICT Order Blocks"><input type="checkbox" id="togOrderBlocks" checked> <span class="dot ob"></span> Order Blocks</label>
-          <label class="toggle-pill" title="Previous Day/Week High & Low + Equal Highs/Lows"><input type="checkbox" id="togLiquidity" checked> <span class="dot liq"></span> PDH/PDL/EQ</label>
-          <label class="toggle-pill" title="Multi-touch Validated Trendlines"><input type="checkbox" id="togTrendlines" checked> <span class="dot tl"></span> Trendlines</label>
-          <label class="toggle-pill" title="Institutional Psychological 20s and 80s Levels"><input type="checkbox" id="togPsych" checked> <span class="dot psych"></span> 20/80 Levels</label>
-          <label class="toggle-pill" title="Swing Structure and Valid Break of Structure (>=40%)"><input type="checkbox" id="togSwings" checked> <span class="dot swings"></span> Swings & BoS</label>
-          <label class="toggle-pill" title="Toggle Volume Histogram on/off"><input type="checkbox" id="togVolume" checked> <span class="dot vol"></span> Volume</label>
+        <div class="toolbar-right">
+          <button class="btn-fullscreen" id="btnFullscreen" title="Toggle Full Screen (or press 'F')">
+            <svg id="fsIconExpand" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+            <svg id="fsIconCompress" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display: none;"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/></svg>
+            <span id="fsBtnText">Full Screen</span>
+          </button>
         </div>
       </div>
 

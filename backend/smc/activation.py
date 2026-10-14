@@ -16,7 +16,7 @@ from typing import List, Dict, Any, Optional, Tuple
 import time
 from backend.smc.models import (
     Candle, FairValueGap, OrderBlock, LiquidityLevel, Trendline,
-    BreakOfStructure, DisplacementCandle, ActivationState,
+    BreakOfStructure, DisplacementCandle, ActivationState, CanonicalState,
     ChecklistItem, WatchlistEntry, WatchlistAlert, AnalysisConfig
 )
 from backend.smc.structure import _atr
@@ -35,13 +35,16 @@ class AlertStore:
     - Escalation of severity breaks cooldown immediately.
     """
 STATE_SEVERITY: Dict[str, int] = {
+    "WAITING": 0,
     "INACTIVE": 0,
     "APPROACHING": 1,
+    "AT LEVEL": 2,
     "AT KEY LEVEL": 2,
     "REACTION DEVELOPING": 3,
     "SETUP TO INSPECT": 4,
     "CHECKLIST REVIEW": 5,
     "EXTREME": 6,
+    "PASSED / INVALIDATED": -1,
     "INVALIDATED / PASSED": -1,
     "SWEPT / MITIGATED": -1,
 }
@@ -250,10 +253,11 @@ def evaluate_level_activation(
     ]
 
     evidence: List[str] = []
-    state: ActivationState = "INACTIVE"
+    state: ActivationState = CanonicalState("WAITING")
     state_reason: str = ""
     last_event_time: Optional[int] = None
     last_event_ist: Optional[str] = None
+    relevant_event_str: Optional[str] = None
 
     # Check opposing zones
     opposing_warning_str = None
@@ -275,12 +279,13 @@ def evaluate_level_activation(
     is_invalidated = False
     if freshness.lower() == "fully_mitigated" and dist_abs > (approach_threshold * 1.5):
         is_invalidated = True
-        state = "INVALIDATED / PASSED"
+        state = CanonicalState("PASSED / INVALIDATED")
         state_reason = f"Level was fully mitigated and price has traded beyond approach threshold (${dist_abs:.2f} away)."
         evidence.append(f"Fully mitigated at past timestamp; current distance ${dist_abs:.2f}")
+        relevant_event_str = "Level fully mitigated and passed"
 
     if not is_invalidated:
-        # Step A: Check In-Zone vs Approaching vs Inactive
+        # Step A: Check In-Zone vs Approaching vs Waiting
         in_zone = False
         if top is not None and bottom is not None:
             in_zone = _is_price_in_zone(current_price, top, bottom, buffer=at_level_buffer)
@@ -292,21 +297,23 @@ def evaluate_level_activation(
         if in_zone:
             checklist[0].satisfied = True
             checklist[0].evidence = f"Price at ${current_price:.2f} is within zone [${bottom:.2f} - ${top:.2f}] (buffer: ${at_level_buffer:.2f})"
-            state = "AT KEY LEVEL"
-            state_reason = f"Price has entered the defined key level zone (${bottom:.2f} - ${top:.2f})."
+            state = CanonicalState("AT LEVEL")
+            state_reason = f"Price has reached the defined key level zone (${bottom:.2f} - ${top:.2f})."
             evidence.append(checklist[0].evidence)
+            relevant_event_str = f"Price reached level zone (${bottom:.2f} - ${top:.2f})"
             if current_candles:
                 last_event_time = current_candles[-1].time
                 last_event_ist = current_candles[-1].ist_time
         elif is_approaching:
-            state = "APPROACHING"
-            state_reason = f"Price (${current_price:.2f}) is within {approach_threshold:.2f} (ATR-derived) of level zone."
+            state = CanonicalState("APPROACHING")
+            state_reason = f"Price (${current_price:.2f}) is within ${approach_threshold:.2f} (ATR-derived) of level zone."
             evidence.append(f"Approaching distance: ${dist_abs:.2f} (Threshold: ${approach_threshold:.2f})")
+            relevant_event_str = f"Approaching level (${dist_abs:.2f} away)"
             if current_candles:
                 last_event_time = current_candles[-1].time
                 last_event_ist = current_candles[-1].ist_time
         else:
-            state = "INACTIVE"
+            state = CanonicalState("WAITING")
             state_reason = f"Price (${current_price:.2f}) is ${dist_abs:.2f} away, beyond approaching threshold (${approach_threshold:.2f})."
 
         # Step B: If in zone or approaching, evaluate Step 2 (Liquidity Sweep or Rejection Structure)
@@ -321,6 +328,7 @@ def evaluate_level_activation(
                         checklist[1].satisfied = True
                         checklist[1].evidence = f"{liq.label} swept at ${liq.price:.2f} (Time: {liq.sweep_ist or 'recent'})"
                         evidence.append(checklist[1].evidence)
+                        relevant_event_str = f"Confirmed sweep of {liq.label} at ${liq.price:.2f}"
                         if liq.sweep_time:
                             last_event_time = liq.sweep_time
                             last_event_ist = liq.sweep_ist
@@ -341,6 +349,7 @@ def evaluate_level_activation(
                         checklist[1].satisfied = True
                         checklist[1].evidence = f"Long rejection lower wick (${lower_wick:.2f}) printed at ${rc.low:.2f}"
                         evidence.append(checklist[1].evidence)
+                        relevant_event_str = f"Bullish rejection wick (${lower_wick:.2f}) off support"
                         last_event_time = rc.time
                         last_event_ist = rc.ist_time
                         break
@@ -350,12 +359,13 @@ def evaluate_level_activation(
                         checklist[1].satisfied = True
                         checklist[1].evidence = f"Long rejection upper wick (${upper_wick:.2f}) printed at ${rc.high:.2f}"
                         evidence.append(checklist[1].evidence)
+                        relevant_event_str = f"Bearish rejection wick (${upper_wick:.2f}) off resistance"
                         last_event_time = rc.time
                         last_event_ist = rc.ist_time
                         break
 
             if sweep_found and in_zone:
-                state = "REACTION DEVELOPING"
+                state = CanonicalState("REACTION DEVELOPING")
                 state_reason = f"Price at key level zone with confirmed liquidity reaction / rejection."
 
             # Step C: Check Trendline Breakout (Step 3: SETUP TO INSPECT)
@@ -373,12 +383,14 @@ def evaluate_level_activation(
                                 f"({'confirmed by close' if tl.break_confirmed_by_close else 'wick break'})"
                             )
                             evidence.append(checklist[2].evidence)
+                            sup_text = f" ({tl.structural_support_note})" if tl.structural_support_note else ""
+                            relevant_event_str = f"{tl.timeframe} trendline breakout{sup_text}"
                             last_event_time = tl.breakout_time
                             last_event_ist = tl.breakout_ist
                             break
 
             if trendline_break_found:
-                state = "SETUP TO INSPECT"
+                state = CanonicalState("SETUP TO INSPECT")
                 state_reason = f"Key level reaction followed by validated {checklist[2].timeframe or '1H/30M'} trendline breakout."
 
             # Step D: Check Displacement & Supporting LTF FVG (Step 4 & 5: CHECKLIST REVIEW)
@@ -392,6 +404,7 @@ def evaluate_level_activation(
                         checklist[3].satisfied = True
                         checklist[3].evidence = f"{latest_disp.direction.capitalize()} displacement candle (ratio {latest_disp.body_atr_ratio}x ATR) at {latest_disp.ist_time}"
                         evidence.append(checklist[3].evidence)
+                        relevant_event_str = f"{latest_disp.direction.capitalize()} displacement candle ({latest_disp.body_atr_ratio}x ATR)"
                         last_event_time = latest_disp.time
                         last_event_ist = latest_disp.ist_time
 
@@ -403,6 +416,7 @@ def evaluate_level_activation(
                             checklist[3].satisfied = True
                             checklist[3].evidence = f"Supporting {sf.timeframe} {sf.direction} FVG [${sf.bottom:.2f} - ${sf.top:.2f}] formed"
                             evidence.append(checklist[3].evidence)
+                            relevant_event_str = f"Supporting {sf.timeframe} {sf.direction} FVG formed"
                             break
 
             # If all 5 criteria are met, promote to CHECKLIST REVIEW (unless feed is stale)!
@@ -414,11 +428,37 @@ def evaluate_level_activation(
                 checklist[4].satisfied
             ):
                 if is_stale:
-                    state = "SETUP TO INSPECT"
+                    state = CanonicalState("SETUP TO INSPECT")
                     state_reason = "Full setup sequence detected, but market data feed is STALE (>60s). Retained in WATCH pending live data."
                 else:
-                    state = "CHECKLIST REVIEW"
+                    state = CanonicalState("CHECKLIST REVIEW")
                     state_reason = "Full SMC setup sequence detected. Evidence warrants manual checklist verification."
+
+    # Priority determination:
+    # High: 1D/4H with freshness and structural importance
+    # Medium: Intermediate levels / LTF
+    # Low: Secondary or mitigated levels
+    priority = "Medium"
+    priority_reason = "Intermediate market level under monitoring"
+    score = 50
+
+    if is_invalidated:
+        priority = "Low"
+        priority_reason = "Passed or fully mitigated level."
+        score = 25
+    elif timeframe in ["1D", "4H"]:
+        if freshness in ["unmitigated", "unswept", "Active"]:
+            priority = "High"
+            priority_reason = f"High-priority {timeframe} HTF Level: Key structural boundary."
+            score = 80
+        else:
+            priority = "Medium"
+            priority_reason = f"Medium-priority {timeframe} Level: Partially tested HTF area."
+            score = 65
+    elif "Week" in name or "Day" in name:
+        priority = "High"
+        priority_reason = "High-priority Macro Liquidity: Untested resting orders."
+        score = 85
 
     # Register alert transition in alert store
     t_event = current_candles[-1].time if current_candles else int(time.time())
@@ -449,11 +489,16 @@ def evaluate_level_activation(
         freshness=freshness,
         state=state,
         state_reason=state_reason,
+        priority=priority,
+        priority_reason=priority_reason,
+        relevant_event=relevant_event_str,
+        opposing_zone_nearby=opposing_warning_str,
         evidence=evidence,
         checklist=checklist,
         opposing_zone_warning=opposing_warning_str,
         last_event_time=last_event_time,
-        last_event_ist=last_event_ist
+        last_event_ist=last_event_ist,
+        score=score
     )
 
 
@@ -584,12 +629,20 @@ def generate_watchlist(
         "CHECKLIST REVIEW": 100,
         "SETUP TO INSPECT": 80,
         "REACTION DEVELOPING": 60,
+        "AT LEVEL": 40,
         "AT KEY LEVEL": 40,
         "APPROACHING": 20,
+        "WAITING": 0,
         "INACTIVE": 0,
+        "PASSED / INVALIDATED": -10,
         "INVALIDATED / PASSED": -10,
     }
-    entries.sort(key=lambda e: (-state_weights.get(e.state, 0), abs(e.distance)))
+    priority_order = {"High": 3, "Medium": 2, "Low": 1}
+    entries.sort(key=lambda e: (
+        -state_weights.get(e.state, 0),
+        -priority_order.get(e.priority, 1),
+        abs(e.distance)
+    ))
 
     # Get active unacknowledged alerts
     alerts = global_alert_store.get_alerts(include_acknowledged=False)

@@ -1,3 +1,4 @@
+import time
 import pytest
 from backend.adapters.delta_exchange import DeltaExchangeAdapter
 from backend.smc.models import Candle
@@ -101,4 +102,63 @@ async def test_fetch_candles_enforces_24h_minimum(monkeypatch):
     # Requesting limit=5 on 1M must be clamped to at least MIN_24H_CANDLES["1M"] (1450)
     candles = await adapter.fetch_historical_candles(".DEXAUTUSD", "1M", limit=5)
     assert len(candles) >= MIN_24H_CANDLES["1M"]
+
+
+def test_utc_timestamp_formatting():
+    adapter = DeltaExchangeAdapter()
+    raw = {
+        "time": 1700000000,
+        "open": 4000.0,
+        "high": 4010.0,
+        "low": 3995.0,
+        "close": 4005.0,
+        "volume": 50.0
+    }
+    candle = adapter._normalize_candle(raw)
+    assert candle is not None
+    assert candle.utc_time is not None
+    assert "UTC" in candle.utc_time
+    assert candle.ist_time is not None
+    assert "IST" in candle.ist_time
+
+
+def test_feed_state_transitions():
+    import time
+    adapter = DeltaExchangeAdapter()
+    
+    # 1. Initially stopped -> DISCONNECTED
+    assert adapter.get_feed_state() == "DISCONNECTED"
+    
+    # 2. Running and connected with recent update -> CONNECTED
+    adapter.is_running = True
+    adapter.connection_status = "Connected"
+    adapter.last_successful_update = int(time.time())
+    assert adapter.get_feed_state() == "CONNECTED"
+    
+    # 3. Update older than 120s -> STALE
+    adapter.last_successful_update = int(time.time()) - 150
+    assert adapter.get_feed_state() == "STALE"
+    
+    # 4. Polling fallback or reconnecting -> RECOVERING
+    adapter.use_polling_fallback = True
+    assert adapter.get_feed_state() == "RECOVERING"
+    adapter.use_polling_fallback = False
+    
+    # 5. Invalid data detected -> INVALID DATA
+    adapter.has_invalid_data = True
+    assert adapter.get_feed_state() == "INVALID DATA"
+
+
+def test_market_data_status_generation():
+    adapter = DeltaExchangeAdapter()
+    adapter.is_running = True
+    adapter.connection_status = "Connected"
+    adapter.last_successful_update = int(time.time())
+
+    status = adapter.get_market_data_status("XAUTUSD", "1H")
+    assert status.symbol == "XAUTUSD"
+    assert status.feed_state == "CONNECTED"
+    assert status.contract_multiplier == 0.001
+    assert status.tick_size == 0.01
+    assert status.heartbeat_ok is True
 

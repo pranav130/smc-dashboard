@@ -80,6 +80,19 @@ def calculate_trendlines(
                             breakout_ist = c.ist_time
                             break
 
+                # Evaluate structural support: higher low before bullish breakout
+                has_hl = False
+                note = None
+                if broken and breakout_time:
+                    # Check swing lows that formed between h1 and breakout_time
+                    inter_lows = [l for l in lows if h1.time <= l.time <= breakout_time]
+                    if len(inter_lows) >= 2 and inter_lows[-1].price > inter_lows[-2].price:
+                        has_hl = True
+                        note = f"Higher low at ${inter_lows[-1].price:.2f} supported bullish breakout"
+                    elif any(l.label == "HL" for l in inter_lows):
+                        has_hl = True
+                        note = "Higher low confirmed prior to breakout"
+
                 proj_price = round(h1.price + slope * (current_time - h1.time), 2)
 
                 tl_id = f"tl_res_{timeframe}_{h1.time}_{h2.time}"
@@ -98,7 +111,9 @@ def calculate_trendlines(
                     breakout_ist=breakout_ist,
                     slope=slope,
                     current_projected_price=proj_price,
-                    break_confirmed_by_close=broken and config.trendline_break_requires_close
+                    break_confirmed_by_close=broken and config.trendline_break_requires_close,
+                    has_higher_low_pre_break=has_hl,
+                    structural_support_note=note
                 ))
 
     # 2. Support Trendline (Connecting ascending swing lows)
@@ -142,6 +157,18 @@ def calculate_trendlines(
                             breakout_ist = c.ist_time
                             break
 
+                # Evaluate structural support: lower high before bearish breakdown
+                has_lh = False
+                note = None
+                if broken and breakout_time:
+                    inter_highs = [h for h in highs if l1.time <= h.time <= breakout_time]
+                    if len(inter_highs) >= 2 and inter_highs[-1].price < inter_highs[-2].price:
+                        has_lh = True
+                        note = f"Lower high at ${inter_highs[-1].price:.2f} supported bearish breakdown"
+                    elif any(h.label == "LH" for h in inter_highs):
+                        has_lh = True
+                        note = "Lower high confirmed prior to breakdown"
+
                 proj_price = round(l1.price + slope * (current_time - l1.time), 2)
 
                 tl_id = f"tl_sup_{timeframe}_{l1.time}_{l2.time}"
@@ -160,7 +187,9 @@ def calculate_trendlines(
                     breakout_ist=breakout_ist,
                     slope=slope,
                     current_projected_price=proj_price,
-                    break_confirmed_by_close=broken and config.trendline_break_requires_close
+                    break_confirmed_by_close=broken and config.trendline_break_requires_close,
+                    has_lower_high_pre_break=has_lh,
+                    structural_support_note=note
                 ))
 
     # Keep only most relevant recent trendlines (e.g. up to 6)

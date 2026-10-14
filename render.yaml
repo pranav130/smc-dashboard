@@ -15,7 +15,7 @@ services:
       - key: EXECUTION_MODE
         value: PAPER
       - key: DELTA_PRICE_SOURCE
-        value: index
+        value: mark
       - key: INITIAL_PAPER_BALANCE
         value: "10000.0"
       - key: AUTO_PAPER_TRADING_ENABLED

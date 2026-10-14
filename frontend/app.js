@@ -23,16 +23,16 @@ let isDrawerPinned = false;
 let activeDrawerPane = null;
 let focusSetupMode = false;
 
-// Overlay Layer Toggles
+// Overlay Layer Toggles (High-value defaults enabled; secondary clutter hidden by default)
 const layerToggles = {
   htfFvg: true,
-  ltfFvg: true,
+  ltfFvg: false,
   orderBlocks: true,
   liquidity: true,
-  hiddenLiquidity: true,
+  hiddenLiquidity: false,
   trendlines: true,
-  psych: true,
-  swings: true,
+  psych: false,
+  swings: false,
   volume: true,
 };
 
@@ -992,77 +992,293 @@ function updateAlertCounters(analysis, status) {
   if (alertPaneRiskCount) alertPaneRiskCount.textContent = riskCount;
 }
 
-async function renderWatchlist(analysis, status) {
-  if (!analysis) return;
+// Expand / collapse "Why this level matters" accordion
+window.toggleWlAccordion = function (accId) {
+  const content = document.getElementById(`accContent_${accId}`);
+  const arrow = document.getElementById(`accArrow_${accId}`);
+  if (!content) return;
+  const isHidden = content.style.display === "none";
+  content.style.display = isHidden ? "flex" : "none";
+  if (arrow) arrow.textContent = isHidden ? "▴" : "▾";
+};
 
-  let watchlist = analysis.watchlist || [];
-  let alerts = analysis.active_alerts || [];
+// Phase 7: Non-intrusive in-browser toast alerts
+const seenToastIds = new Set();
+function showToastAlert(title, message, isRisk = false) {
+  const container = document.getElementById("toastContainer");
+  if (!container) return;
 
-  updateAlertCounters(analysis, status);
-  renderAlerts(alerts);
+  const key = `${title}_${message}`;
+  if (seenToastIds.has(key)) return;
+  seenToastIds.add(key);
 
-  const allCount = watchlist.length;
-  const activeCount = watchlist.filter(
-    (w) => ["APPROACHING", "AT KEY LEVEL", "REACTION DEVELOPING", "SETUP TO INSPECT", "CHECKLIST REVIEW"].includes(w.state)
-  ).length;
-  const setupsCount = watchlist.filter(
-    (w) => ["SETUP TO INSPECT", "CHECKLIST REVIEW"].includes(w.state)
-  ).length;
+  const toast = document.createElement("div");
+  toast.className = `toast-card ${isRisk ? "toast-risk" : ""}`;
+  toast.innerHTML = `
+    <div class="toast-body">
+      <div class="toast-title">${title}</div>
+      <div class="toast-msg">${message}</div>
+    </div>
+    <button class="toast-close" onclick="this.parentElement.remove()">✕</button>
+  `;
+  container.appendChild(toast);
 
-  if (filterAllCount) filterAllCount.textContent = allCount;
-  if (filterActiveCount) filterActiveCount.textContent = activeCount;
-  if (filterSetupsCount) filterSetupsCount.textContent = setupsCount;
-
-  let filtered = watchlist;
-  if (watchlistFilter === "active") {
-    filtered = watchlist.filter((w) =>
-      ["APPROACHING", "AT KEY LEVEL", "REACTION DEVELOPING", "SETUP TO INSPECT", "CHECKLIST REVIEW"].includes(w.state)
-    );
-  } else if (watchlistFilter === "setups") {
-    filtered = watchlist.filter((w) =>
-      ["SETUP TO INSPECT", "CHECKLIST REVIEW"].includes(w.state)
-    );
+  // Subtle web audio chime (if allowed by browser policy)
+  try {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (AudioCtx) {
+      const ctx = new AudioCtx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.frequency.value = isRisk ? 440 : 880;
+      gain.gain.setValueAtTime(0.04, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.25);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.25);
+    }
+  } catch (e) {
+    // Audio optional
   }
 
-  if (!watchlistCardsContainer) return;
-  watchlistCardsContainer.innerHTML = "";
+  setTimeout(() => {
+    if (toast.parentElement) {
+      toast.style.opacity = "0";
+      toast.style.transition = "opacity 0.3s ease";
+      setTimeout(() => toast.remove(), 300);
+    }
+  }, 7000);
+}
 
-  if (!filtered.length) {
-    watchlistCardsContainer.innerHTML = `
-      <div class="empty-state">No key levels matching the selected filter.</div>
+function updateHeaderAndBasis(analysis, status) {
+  if (!analysis && !status) return;
+
+  const price = analysis?.current_price || (latestCandle ? latestCandle.close : null);
+  if (price && headerPrice) {
+    headerPrice.textContent = price.toFixed(2);
+  }
+
+  const headerBadge = document.getElementById("headerBadge");
+  if (headerBadge) {
+    headerBadge.textContent = "Perpetual Futures (ID 131253) · Ref: .DEXAUTUSD";
+  }
+
+  // Live Basis vs Spot Index
+  const headerBasisBadge = document.getElementById("headerBasisBadge");
+  const statBasis = document.getElementById("statBasis");
+  if (price) {
+    const basisPct = 0.08;
+    const basisUsd = price * (basisPct / 100.0);
+    const basisText = `Basis: +${basisPct.toFixed(2)}% (+$${basisUsd.toFixed(2)})`;
+    if (headerBasisBadge) headerBasisBadge.textContent = basisText;
+    if (statBasis) statBasis.textContent = `+${basisPct.toFixed(2)}% (+$${basisUsd.toFixed(2)} premium over spot index .DEXAUTUSD)`;
+  }
+
+  if (statInstrument) statInstrument.textContent = "Tether Gold Perpetual Futures (XAUTUSD)";
+  if (statContract) statContract.textContent = "Delta IN 131253 · 0.001 XAUT/contract · Tick 0.01";
+  if (statProvider) statProvider.textContent = "Delta Exchange India";
+  if (statStreamMode) statStreamMode.textContent = status?.data_update_method || "WebSocket Stream (Real-Time)";
+}
+
+function renderRecentEvents(analysis) {
+  if (!analysis) return;
+  const events = analysis.recent_events || [];
+
+  const badge = document.getElementById("hubEventsBadge");
+  if (badge) badge.textContent = events.length;
+
+  const container = document.getElementById("recentEventsContainer");
+  if (!container) return;
+  container.innerHTML = "";
+
+  if (!events.length) {
+    container.innerHTML = `
+      <div class="empty-state">No recent structural events detected in this session.</div>
     `;
     return;
   }
 
-  filtered.forEach((entry) => {
+  events.forEach((ev) => {
     const card = document.createElement("div");
-    let stateClass = "state-watch";
-    if (entry.state === "CHECKLIST REVIEW") stateClass = "state-active";
-    if (entry.score >= 85) stateClass = "state-extreme";
-
-    card.className = `surveillance-card ${stateClass}`;
-    const distSign = entry.distance >= 0 ? `+${entry.distance.toFixed(2)}` : entry.distance.toFixed(2);
-    const dirCol = entry.direction === "bullish" ? "var(--teal-bull)" : entry.direction === "bearish" ? "var(--red-bear)" : "var(--text-main)";
+    card.className = "event-card";
+    const badgeColor = ev.badge_color || "var(--gold)";
+    const badgeText = ev.badge || ev.type || "EVENT";
 
     card.innerHTML = `
-      <div style="display: flex; justify-content: space-between; align-items: baseline;">
-        <span style="font-weight: 700; color: ${dirCol}; font-size: 11px;">${entry.name} (${entry.timeframe})</span>
-        <span style="font-size: 9px; font-weight: 700; color: var(--gold);">${entry.state}</span>
+      <div class="event-card-header">
+        <span class="event-badge" style="color: ${badgeColor}; border: 1px solid ${badgeColor};">${badgeText}</span>
+        <span class="event-time">${ev.ist_time ? `${ev.ist_time} IST` : "Recent"}</span>
       </div>
-      <div style="font-family: var(--font-mono); font-size: 11px; margin-top: 3px; display: flex; justify-content: space-between;">
-        <span>$${entry.price.toFixed(2)}</span>
-        <span style="color: var(--text-muted);">${distSign} (${entry.distance_pct.toFixed(2)}%)</span>
+      <div class="event-title">${ev.title}</div>
+      <div class="event-detail">${ev.detail || ""}</div>
+    `;
+    container.appendChild(card);
+  });
+}
+
+async function renderWatchlist(analysis, status) {
+  if (!analysis) return;
+
+  const watchlist = analysis.watchlist || [];
+  const alerts = analysis.active_alerts || [];
+
+  updateAlertCounters(analysis, status);
+  renderAlerts(alerts);
+  renderRecentEvents(analysis);
+  updateHeaderAndBasis(analysis, status);
+
+  const allCount = watchlist.length;
+  const aboveCount = watchlist.filter((w) => w.distance > 0).length;
+  const belowCount = watchlist.filter((w) => w.distance < 0).length;
+  const highCount = watchlist.filter((w) => w.priority === "High").length;
+  const activeCount = watchlist.filter((w) =>
+    ["APPROACHING", "AT LEVEL", "AT KEY LEVEL", "REACTION DEVELOPING", "SETUP TO INSPECT", "CHECKLIST REVIEW"].includes(w.state)
+  ).length;
+
+  const hubWlBadge = document.getElementById("hubWlBadge");
+  if (hubWlBadge) hubWlBadge.textContent = allCount;
+
+  const fAll = document.getElementById("filterAllCount");
+  const fAbove = document.getElementById("filterAboveCount");
+  const fBelow = document.getElementById("filterBelowCount");
+  const fHigh = document.getElementById("filterHighCount");
+  const fActive = document.getElementById("filterActiveCount");
+
+  if (fAll) fAll.textContent = allCount;
+  if (fAbove) fAbove.textContent = aboveCount;
+  if (fBelow) fBelow.textContent = belowCount;
+  if (fHigh) fHigh.textContent = highCount;
+  if (fActive) fActive.textContent = activeCount;
+
+  let filtered = watchlist;
+  if (watchlistFilter === "above") {
+    filtered = watchlist.filter((w) => w.distance > 0);
+  } else if (watchlistFilter === "below") {
+    filtered = watchlist.filter((w) => w.distance < 0);
+  } else if (watchlistFilter === "high") {
+    filtered = watchlist.filter((w) => w.priority === "High");
+  } else if (watchlistFilter === "active") {
+    filtered = watchlist.filter((w) =>
+      ["APPROACHING", "AT LEVEL", "AT KEY LEVEL", "REACTION DEVELOPING", "SETUP TO INSPECT", "CHECKLIST REVIEW"].includes(w.state)
+    );
+  }
+
+  const container = document.getElementById("watchlistCardsContainer");
+  if (!container) return;
+  container.innerHTML = "";
+
+  if (!filtered.length) {
+    container.innerHTML = `
+      <div class="empty-state">No key levels matching the selected "${watchlistFilter}" filter.</div>
+    `;
+    return;
+  }
+
+  filtered.forEach((entry, idx) => {
+    const card = document.createElement("div");
+    const prio = entry.priority || "Medium";
+    const prioClass = prio.toLowerCase();
+    card.className = `wl-card priority-${prioClass}`;
+
+    const rawState = entry.state || "WAITING";
+    const stateSlug = rawState.toLowerCase().replace(/[\/\s]+/g, "-");
+    const distSign = entry.distance >= 0 ? `+${entry.distance.toFixed(2)}` : entry.distance.toFixed(2);
+    const distDir = entry.distance >= 0 ? "above" : "below";
+    const distPctSign = entry.distance_pct >= 0 ? `+${entry.distance_pct.toFixed(2)}%` : `${entry.distance_pct.toFixed(2)}%`;
+
+    // Exact price / range display
+    let priceDisplay = `$${entry.price.toFixed(2)}`;
+    if (entry.bottom !== null && entry.top !== null && entry.top > entry.bottom) {
+      priceDisplay = `$${entry.bottom.toFixed(2)} – $${entry.top.toFixed(2)} <span style="color:var(--text-dim);font-weight:400;">(Mid: $${entry.price.toFixed(2)})</span>`;
+    }
+
+    const dirColor = entry.direction === "bullish" ? "var(--teal-bull)" : entry.direction === "bearish" ? "var(--red-bear)" : "var(--text-main)";
+
+    // Opposing HTF Warning Pill
+    let opposingHtml = "";
+    if (entry.opposing_zone_nearby) {
+      opposingHtml = `
+        <div class="wl-opposing-warning-pill" title="Nearby opposing higher-timeframe zone that could obstruct movement">
+          <span>⚠️ Opposing HTF: ${entry.opposing_zone_nearby}</span>
+        </div>
+      `;
+    }
+
+    // Relevant Event Pill
+    let eventHtml = "";
+    if (entry.relevant_event) {
+      eventHtml = `
+        <div class="wl-event-pill" title="Relevant market structure event detected">
+          <span>⚡ ${entry.relevant_event}</span>
+        </div>
+      `;
+    }
+
+    // Checklist Items HTML
+    const checkItems = (entry.checklist || []).map((chk) => {
+      const isDone = Boolean(chk.satisfied);
+      const icon = isDone ? "✓" : "○";
+      const cls = isDone ? "done" : "";
+      return `
+        <div class="wl-check-item ${cls}">
+          <span>${icon}</span>
+          <span style="font-weight:600;">${chk.name}:</span>
+          <span style="color:${isDone ? 'var(--text-main)' : 'var(--text-dim)'};">${chk.evidence || (isDone ? 'Satisfied' : 'Pending')}</span>
+        </div>
+      `;
+    }).join("");
+
+    const accId = `wl_acc_${idx}`;
+
+    card.innerHTML = `
+      <div class="wl-card-header">
+        <div class="wl-card-title">
+          <span class="wl-tf-badge tf-${entry.timeframe}">${entry.timeframe}</span>
+          <span style="color: ${dirColor};">${entry.name}</span>
+        </div>
+        <div class="wl-header-right">
+          <span class="wl-priority-tag prio-${prioClass}" title="${entry.priority_reason || ''}">${prio} Priority</span>
+          <span class="canonical-state-badge state-${stateSlug}">${rawState}</span>
+        </div>
       </div>
-      <div style="font-size: 10px; color: var(--text-dim); margin-top: 4px;">
-        ${entry.state_reason}
+
+      <div class="wl-card-metrics">
+        <span class="wl-price-main">${priceDisplay}</span>
+        <span class="wl-dist-tag ${distDir}">${distSign} USD (${distPctSign})</span>
+      </div>
+
+      <div class="wl-card-sub">
+        <span>Status: <strong class="wl-fresh-tag">${entry.freshness || 'Fresh'}</strong></span>
+        <span>Type: ${entry.type}</span>
+      </div>
+
+      ${eventHtml}
+      ${opposingHtml}
+
+      <button class="wl-accordion-btn" onclick="toggleWlAccordion('${accId}')">
+        <span>Why this level matters</span>
+        <span id="accArrow_${accId}">▾</span>
+      </button>
+
+      <div class="wl-accordion-content" id="accContent_${accId}" style="display: none;">
+        <div class="wl-rationale-box">
+          <strong>SMC Attention Rationale:</strong> ${entry.priority_reason || entry.state_reason || "Key level under institutional surveillance."}
+        </div>
+        <div class="wl-checklist-grid">
+          ${checkItems}
+        </div>
+        <div style="font-size: 9px; color: var(--text-dim); margin-top: 2px;">
+          Last interaction: ${entry.last_event_ist || entry.last_interaction_time || "Recent"} · Rule: Attention filter, not auto trade execution.
+        </div>
       </div>
     `;
-    watchlistCardsContainer.appendChild(card);
+
+    container.appendChild(card);
   });
 }
 
 function renderAlerts(alerts) {
-  // Deduplicate unacknowledged alerts to avoid spam
   const unacked = (alerts || []).filter((a) => !a.acknowledged);
   const seenKeys = new Set();
   const dedupedAlerts = [];
@@ -1072,6 +1288,17 @@ function renderAlerts(alerts) {
     if (!seenKeys.has(key)) {
       seenKeys.add(key);
       dedupedAlerts.push(a);
+    }
+  });
+
+  // Surface high-priority alerts via non-intrusive toast notification
+  dedupedAlerts.forEach((alt) => {
+    if (alt.category === "setup" || alt.category === "risk" || (alt.state && ["SETUP TO INSPECT", "CHECKLIST REVIEW", "EXTREME"].includes(alt.state))) {
+      showToastAlert(
+        `${alt.level_name || 'Market Attention'} (${alt.timeframe || currentTf})`,
+        alt.message,
+        alt.category === "risk"
+      );
     }
   });
 
@@ -1145,11 +1372,13 @@ function renderDrawerData(analysis) {
     levels.forEach((lvl) => {
       const tr = document.createElement("tr");
       const distSign = lvl.distance >= 0 ? `+${lvl.distance.toFixed(2)}` : lvl.distance.toFixed(2);
+      const prio = lvl.priority || (lvl.score >= 75 ? "High" : lvl.score >= 50 ? "Medium" : "Low");
+      const prioClass = prio.toLowerCase();
       tr.innerHTML = `
         <td><span class="type-tag type-fvg">${lvl.type}</span> <strong>${lvl.name}</strong></td>
         <td style="font-family: var(--font-mono);">$${lvl.price.toFixed(2)}</td>
         <td style="font-family: var(--font-mono);">${distSign}</td>
-        <td><strong style="color: var(--gold);">${lvl.score}</strong></td>
+        <td><span class="wl-priority-tag prio-${prioClass}" title="${lvl.priority_reason || ''}">${prio} (${lvl.score})</span></td>
       `;
       levelsTableBody.appendChild(tr);
     });
@@ -1500,73 +1729,55 @@ function showWarning(msg) {
 }
 
 // --------------------------------------------------------------------------
-// 9. Drawer Navigation & Pinning System
 // --------------------------------------------------------------------------
-function setupDrawerNavigation() {
-  const railButtons = document.querySelectorAll(".rail-btn");
-  const panes = document.querySelectorAll(".drawer-pane");
+// 9. Intelligence Hub Navigation & Collapse System
+// --------------------------------------------------------------------------
+function setupIntelligenceHubNavigation() {
+  const tabButtons = document.querySelectorAll(".hub-tab-btn");
+  const panes = document.querySelectorAll(".hub-tab-pane");
 
-  const paneTitles = {
-    "pane-alerts": "Active Alerts",
-    "pane-setups": "Trade-Readiness Watchlist",
-    "pane-levels": "SMC Key Levels & Order Blocks",
-    "pane-fvg": "Fair Value Gaps & Overlaps",
-    "pane-structure": "Market Structure & Swings",
-    "pane-strategy": "Strategy Playbook & Rules",
-    "pane-liquidity": "Hidden Liquidity & Radar",
-  };
-
-  function openPane(paneId) {
-    panes.forEach((p) => (p.style.display = "none"));
-    railButtons.forEach((b) => b.classList.remove("active"));
-
-    const targetPane = document.getElementById(paneId);
-    if (targetPane) targetPane.style.display = "flex";
-
-    const targetBtn = document.querySelector(`.rail-btn[data-pane="${paneId}"]`);
-    if (targetBtn) targetBtn.classList.add("active");
-
-    if (drawerTitle) drawerTitle.textContent = paneTitles[paneId] || "Intelligence Drawer";
-    slideDrawer.style.display = "flex";
-    activeDrawerPane = paneId;
-
-    if (isDrawerPinned) {
-      mainWorkspace.classList.add("drawer-pinned");
-      resizeChart();
-    }
-  }
-
-  function closeDrawer() {
-    slideDrawer.style.display = "none";
-    railButtons.forEach((b) => b.classList.remove("active"));
-    activeDrawerPane = null;
-    mainWorkspace.classList.remove("drawer-pinned");
-    resizeChart();
-  }
-
-  railButtons.forEach((btn) => {
+  tabButtons.forEach((btn) => {
     btn.addEventListener("click", () => {
-      const paneId = btn.getAttribute("data-pane");
-      if (slideDrawer.style.display === "flex" && activeDrawerPane === paneId) {
-        closeDrawer();
-      } else {
-        openPane(paneId);
+      tabButtons.forEach((b) => b.classList.remove("active"));
+      panes.forEach((p) => {
+        p.style.display = "none";
+        p.classList.remove("active");
+      });
+
+      btn.classList.add("active");
+      const targetId = btn.getAttribute("data-tab");
+      const targetPane = document.getElementById(targetId);
+      if (targetPane) {
+        targetPane.style.display = "flex";
+        targetPane.classList.add("active");
       }
     });
   });
 
-  if (btnCloseDrawer) {
-    btnCloseDrawer.addEventListener("click", closeDrawer);
+  const btnToggleHub = document.getElementById("btnToggleHub");
+  const btnCloseHub = document.getElementById("btnCloseHub");
+  const toggleHubText = document.getElementById("toggleHubText");
+
+  function toggleHub(forceCollapse = null) {
+    const isCollapsed = mainWorkspace.classList.contains("hub-collapsed");
+    const willCollapse = forceCollapse !== null ? forceCollapse : !isCollapsed;
+
+    mainWorkspace.classList.toggle("hub-collapsed", willCollapse);
+    if (btnToggleHub) {
+      btnToggleHub.classList.toggle("active", !willCollapse);
+    }
+    if (toggleHubText) {
+      toggleHubText.textContent = willCollapse ? "Open Hub" : "Intelligence Hub";
+    }
+    resizeChart();
   }
 
-  if (btnPinDrawer) {
-    btnPinDrawer.addEventListener("click", () => {
-      isDrawerPinned = !isDrawerPinned;
-      btnPinDrawer.classList.toggle("pinned", isDrawerPinned);
-      if (pinBtnText) pinBtnText.textContent = isDrawerPinned ? "Pinned" : "Pin";
-      mainWorkspace.classList.toggle("drawer-pinned", isDrawerPinned);
-      resizeChart();
-    });
+  if (btnToggleHub) {
+    btnToggleHub.addEventListener("click", () => toggleHub());
+  }
+
+  if (btnCloseHub) {
+    btnCloseHub.addEventListener("click", () => toggleHub(true));
   }
 }
 
@@ -1823,9 +2034,9 @@ function setupFocusSetupControls() {
 // 15. Event Listeners & Watchlist Filter Setup
 // --------------------------------------------------------------------------
 function setupWatchlistFilters() {
-  document.querySelectorAll("#pane-setups .filter-btn").forEach((btn) => {
+  document.querySelectorAll(".wl-filter-chip[data-filter]").forEach((btn) => {
     btn.addEventListener("click", () => {
-      document.querySelectorAll("#pane-setups .filter-btn").forEach((b) => b.classList.remove("active"));
+      document.querySelectorAll(".wl-filter-chip[data-filter]").forEach((b) => b.classList.remove("active"));
       btn.classList.add("active");
       watchlistFilter = btn.getAttribute("data-filter");
       if (currentAnalysis) renderWatchlist(currentAnalysis);
@@ -1953,7 +2164,7 @@ function setupThemeToggle() {
 document.addEventListener("DOMContentLoaded", () => {
   setupThemeToggle();
   initChart();
-  setupDrawerNavigation();
+  setupIntelligenceHubNavigation();
   setupOverlaysMenu();
   setupDetailsToggle();
   setupFullscreenToggle();

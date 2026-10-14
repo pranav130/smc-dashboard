@@ -11,9 +11,11 @@ import uuid
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from backend.risk.manager import RiskManager
 
 DB_PATH = os.getenv("PAPER_DB_PATH", str(Path(__file__).resolve().parent.parent / "paper_trading.sqlite3"))
 LOCK = threading.RLock()
+global_risk_manager = RiskManager()
 
 DEFAULT_CONFIG: Dict[str, Any] = {
     "starting_equity": 10000.0,
@@ -87,6 +89,23 @@ def _conn() -> sqlite3.Connection:
     CREATE INDEX IF NOT EXISTS idx_paper_orders_setup ON paper_orders(setup_id);
     CREATE INDEX IF NOT EXISTS idx_paper_events_ts ON paper_events(ts);
     """)
+
+    # Dynamic column migrations for Section 7 & 8 metrics
+    existing_cols = {r[1] for r in c.execute("PRAGMA table_info(paper_positions)").fetchall()}
+    for col, col_type in [
+        ("mfe", "REAL DEFAULT 0.0"),
+        ("mae", "REAL DEFAULT 0.0"),
+        ("highest_price", "REAL DEFAULT 0.0"),
+        ("lowest_price", "REAL DEFAULT 0.0"),
+        ("initial_stop", "REAL DEFAULT 0.0"),
+        ("breakeven_triggered", "INTEGER DEFAULT 0"),
+        ("trailing_stop_active", "INTEGER DEFAULT 0"),
+    ]:
+        if col not in existing_cols:
+            try:
+                c.execute(f"ALTER TABLE paper_positions ADD COLUMN {col} {col_type}")
+            except Exception:
+                pass
 
     # Seed configuration and metadata defaults
     for k, v in DEFAULT_CONFIG.items():
@@ -312,6 +331,7 @@ def status() -> Dict[str, Any]:
                 "orders": len(orders),
                 "events": len(events),
             },
+            "risk_manager": global_risk_manager.get_status(now),
         }
 
 def control(action: str, payload: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
@@ -472,6 +492,8 @@ def _execute_close(
             "new_equity": new_eq,
         },
     )
+    global_risk_manager.update_equity(new_eq, now)
+    global_risk_manager.discipline.record_trade_result(net_pnl, now)
 
 def evaluate(setup: Optional[Dict[str, Any]], price: float, price_ts: int, is_stale: bool) -> Dict[str, Any]:
     now = time.time()
@@ -618,9 +640,10 @@ def evaluate(setup: Optional[Dict[str, Any]], price: float, price_ts: int, is_st
                 """
                 INSERT INTO paper_positions(
                     id, setup_id, direction, status, entry_price, current_price, quantity,
-                    notional, stop_loss, take_profit, entry_fee, created_at, signal_json
+                    notional, stop_loss, take_profit, entry_fee, created_at, signal_json,
+                    initial_stop, highest_price, lowest_price, mfe, mae, breakeven_triggered, trailing_stop_active
                 )
-                VALUES(?, ?, ?, 'OPEN', ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES(?, ?, ?, 'OPEN', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0.0, 0.0, 0, 0)
                 """,
                 (
                     pos_id,
@@ -635,6 +658,9 @@ def evaluate(setup: Optional[Dict[str, Any]], price: float, price_ts: int, is_st
                     entry_fee,
                     now,
                     json.dumps(setup, default=str),
+                    stop,
+                    fill_price,
+                    fill_price,
                 ),
             )
             c.execute(
@@ -676,9 +702,91 @@ def evaluate(setup: Optional[Dict[str, Any]], price: float, price_ts: int, is_st
             "entry_price": fill_price,
         }
 
-def mark_to_market(price: float) -> None:
+def update_stop_loss(position_id: str, new_stop: float) -> Dict[str, Any]:
+    """
+    Update position protective stop loss with strict Section 8 monotonic validation.
+    Rule: Stops can ONLY move in the direction of profit (never widened).
+    """
+    with LOCK, _database() as c:
+        row = c.execute("SELECT * FROM paper_positions WHERE id=? AND status='OPEN'", (position_id,)).fetchone()
+        if not row:
+            return {"success": False, "reason": "POSITION_NOT_FOUND", "message": "Open position not found"}
+
+        pos = dict(row)
+        direction = pos["direction"]
+        current_stop = float(pos["stop_loss"])
+        current_price = float(pos["current_price"])
+        new_stop = round(float(new_stop), 2)
+
+        # Monotonicity check
+        if direction == "LONG":
+            if new_stop <= current_stop:
+                _log_event(c, "RISK_VIOLATION", position_id=position_id, detail={
+                    "rule": "MONOTONIC_STOP_WIDEN_PROHIBITED",
+                    "direction": "LONG",
+                    "current_stop": current_stop,
+                    "attempted_stop": new_stop
+                })
+                c.commit()
+                return {
+                    "success": False,
+                    "reason": "REJECTED_NON_MONOTONIC_STOP",
+                    "message": f"Cannot widen stop loss for LONG from ${current_stop:.2f} to ${new_stop:.2f}."
+                }
+            if new_stop >= current_price:
+                return {
+                    "success": False,
+                    "reason": "STOP_EXCEEDS_MARKET_PRICE",
+                    "message": f"New stop (${new_stop:.2f}) must be below current market price (${current_price:.2f})."
+                }
+        else:  # SHORT
+            if new_stop >= current_stop:
+                _log_event(c, "RISK_VIOLATION", position_id=position_id, detail={
+                    "rule": "MONOTONIC_STOP_WIDEN_PROHIBITED",
+                    "direction": "SHORT",
+                    "current_stop": current_stop,
+                    "attempted_stop": new_stop
+                })
+                c.commit()
+                return {
+                    "success": False,
+                    "reason": "REJECTED_NON_MONOTONIC_STOP",
+                    "message": f"Cannot widen stop loss for SHORT from ${current_stop:.2f} to ${new_stop:.2f}."
+                }
+            if new_stop <= current_price:
+                return {
+                    "success": False,
+                    "reason": "STOP_EXCEEDS_MARKET_PRICE",
+                    "message": f"New stop (${new_stop:.2f}) must be above current market price (${current_price:.2f})."
+                }
+
+        # Apply update
+        c.execute("UPDATE paper_positions SET stop_loss=? WHERE id=?", (new_stop, position_id))
+        _log_event(c, "STOP_LOSS_UPDATED", position_id=position_id, detail={
+            "old_stop": current_stop,
+            "new_stop": new_stop,
+            "direction": direction
+        })
+        c.commit()
+        return {
+            "success": True,
+            "message": f"Stop loss updated to ${new_stop:.2f}",
+            "position_id": position_id,
+            "new_stop": new_stop
+        }
+
+def mark_to_market(price: float, high: Optional[float] = None, low: Optional[float] = None) -> None:
+    """
+    Update open positions with realistic execution simulation:
+    - MFE and MAE tracking
+    - Break-even milestone activation (at 1R profit)
+    - Conservative candle tie-breaker: if both stop and target touched in same bar, STOP LOSS executes.
+    """
     if not price or price <= 0:
         return
+    bar_high = float(high) if high is not None else float(price)
+    bar_low = float(low) if low is not None else float(price)
+
     with LOCK, _database() as c:
         _check_day_rollover(c)
         cfg = {k: _meta(c, k) for k in DEFAULT_CONFIG}
@@ -686,23 +794,83 @@ def mark_to_market(price: float) -> None:
 
         for row in open_pos_rows:
             pos = dict(row)
+            pos_id = pos["id"]
             direction = pos["direction"]
-            stop = pos["stop_loss"]
-            target = pos["take_profit"]
+            entry_price = float(pos["entry_price"])
+            stop = float(pos["stop_loss"])
+            target = float(pos["take_profit"])
+            initial_stop = float(pos.get("initial_stop") or stop)
+            prev_highest = float(pos.get("highest_price") or entry_price)
+            prev_lowest = float(pos.get("lowest_price") or entry_price)
+            be_triggered = int(pos.get("breakeven_triggered") or 0)
 
-            c.execute("UPDATE paper_positions SET current_price=? WHERE id=?", (price, pos["id"]))
+            # Update highest and lowest extremes
+            highest = max(prev_highest, bar_high)
+            lowest = min(prev_lowest, bar_low)
 
-            # Conservative evaluation: check stop loss first
+            # MFE and MAE calculation
             if direction == "LONG":
-                if price <= stop:
-                    _execute_close(c, pos, price, "STOP_LOSS", cfg)
-                elif price >= target:
-                    _execute_close(c, pos, price, "TAKE_PROFIT", cfg)
+                mfe = max(0.0, highest - entry_price)
+                mae = max(0.0, entry_price - lowest)
+            else:
+                mfe = max(0.0, entry_price - lowest)
+                mae = max(0.0, highest - entry_price)
+
+            # 1R Break-even milestone check
+            r_distance = abs(entry_price - initial_stop)
+            if be_triggered == 0 and r_distance > 0:
+                if direction == "LONG" and bar_high >= (entry_price + r_distance):
+                    # Move stop to break-even + small buffer
+                    new_be_stop = round(entry_price + 0.1, 2)
+                    if new_be_stop > stop:
+                        stop = new_be_stop
+                        be_triggered = 1
+                        _log_event(c, "BREAKEVEN_TRIGGERED", position_id=pos_id, detail={
+                            "entry": entry_price, "new_stop": stop, "1R_target": entry_price + r_distance
+                        })
+                elif direction == "SHORT" and bar_low <= (entry_price - r_distance):
+                    new_be_stop = round(entry_price - 0.1, 2)
+                    if new_be_stop < stop:
+                        stop = new_be_stop
+                        be_triggered = 1
+                        _log_event(c, "BREAKEVEN_TRIGGERED", position_id=pos_id, detail={
+                            "entry": entry_price, "new_stop": stop, "1R_target": entry_price - r_distance
+                        })
+
+            # Update live position state in DB
+            c.execute(
+                """
+                UPDATE paper_positions
+                SET current_price=?, highest_price=?, lowest_price=?, mfe=?, mae=?,
+                    stop_loss=?, breakeven_triggered=?
+                WHERE id=?
+                """,
+                (price, highest, lowest, mfe, mae, stop, be_triggered, pos_id)
+            )
+
+            # Execution simulation: Conservative candle tie-breaker
+            # If both stop and target touched in the same bar, assume stop was hit first!
+            if direction == "LONG":
+                stop_touched = (bar_low <= stop)
+                target_touched = (bar_high >= target)
+                if stop_touched and target_touched:
+                    # Conservative tie-breaker: STOP LOSS executed
+                    _execute_close(c, pos, stop, "STOP_LOSS", cfg)
+                elif stop_touched:
+                    _execute_close(c, pos, stop, "STOP_LOSS", cfg)
+                elif target_touched:
+                    _execute_close(c, pos, target, "TAKE_PROFIT", cfg)
             else:  # SHORT
-                if price >= stop:
-                    _execute_close(c, pos, price, "STOP_LOSS", cfg)
-                elif price <= target:
-                    _execute_close(c, pos, price, "TAKE_PROFIT", cfg)
+                stop_touched = (bar_high >= stop)
+                target_touched = (bar_low <= target)
+                if stop_touched and target_touched:
+                    # Conservative tie-breaker: STOP LOSS executed
+                    _execute_close(c, pos, stop, "STOP_LOSS", cfg)
+                elif stop_touched:
+                    _execute_close(c, pos, stop, "STOP_LOSS", cfg)
+                elif target_touched:
+                    _execute_close(c, pos, target, "TAKE_PROFIT", cfg)
+
         c.commit()
 
 def get_positions(status_filter: Optional[str] = None) -> List[Dict[str, Any]]:

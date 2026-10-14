@@ -28,6 +28,8 @@ from backend.paper.database import init_db, get_db
 from backend.paper.engine import PaperTradingEngine
 from backend.paper.models import PaperLogModel
 from backend import paper_trading
+from backend.risk.rejection_inspector import global_rejection_inspector
+from backend.backtesting.engine import BacktestEngine
 
 logger = logging.getLogger("App")
 logging.basicConfig(level=logging.INFO)
@@ -213,8 +215,8 @@ app.add_middleware(
 # ==============================================================================
 # Health Check Endpoints (for Render, Railway, Load Balancer)
 # ==============================================================================
-@app.get("/health")
-@app.get("/api/health")
+@app.api_route("/health", methods=["GET", "HEAD"])
+@app.api_route("/api/health", methods=["GET", "HEAD"])
 async def health_check():
     db_ok = False
     try:
@@ -455,6 +457,91 @@ async def paper_close_position(request: Request):
         return {"success": False, "message": "Missing position_id"}
     return paper_trading.close_position(target_id)
 
+@app.get("/api/paper/rejections")
+async def get_paper_rejections(
+    model: Optional[str] = Query(None),
+    stage: Optional[str] = Query(None),
+    limit: int = Query(100)
+):
+    """Retrieve filtered list of rejected candidate trade setups."""
+    return {
+        "success": True,
+        "rejections": global_rejection_inspector.get_rejections(limit=limit, model_filter=model, stage_filter=stage),
+        "summary": global_rejection_inspector.get_rejection_summary()
+    }
+
+@app.get("/api/paper/rejections/summary")
+async def get_paper_rejections_summary():
+    """Retrieve aggregated rejection statistics by model and failed pipeline stage."""
+    return {
+        "success": True,
+        "summary": global_rejection_inspector.get_rejection_summary()
+    }
+
+@app.post("/api/paper/backtest")
+async def run_paper_backtest(payload: Dict[str, Any] = Body(default={})):
+    """
+    Execute historical walk-forward backtest (60% Train, 20% Val, 20% Test) and Monte Carlo simulation.
+    """
+    strategy = payload.get("strategy", "COMBINED").upper()
+    candles_1h = adapter.get_candles("1H")
+    candles_4h = adapter.get_candles("4H")
+    candles_1d = adapter.get_candles("1D")
+
+    if len(candles_1h) < 30:
+        return {
+            "success": False,
+            "message": f"Insufficient historical candles ({len(candles_1h)}/30 loaded). Refresh market data first."
+        }
+
+    engine = BacktestEngine()
+    results = engine.run_walk_forward_validation(
+        candles_1h=candles_1h,
+        candles_4h=candles_4h,
+        candles_1d=candles_1d,
+        strategy_mode=strategy
+    )
+    return {
+        "success": True,
+        "strategy": strategy,
+        "results": results
+    }
+
+@app.get("/api/paper/trade_replay/{position_id}")
+async def get_trade_replay(position_id: str):
+    """
+    Forensic point-in-time trade reconstruction:
+    Reconstructs exact signal state, entry fill, excursions (MFE/MAE), stop adjustments, and exit fills.
+    """
+    positions = paper_trading.get_positions()
+    target_pos = next((p for p in positions if p["id"] == position_id), None)
+    if not target_pos:
+        raise HTTPException(status_code=404, detail="Trade position not found")
+
+    events = [e for e in paper_trading.get_events() if (e.get("position_id") == position_id or e.get("setup_id") == target_pos.get("setup_id"))]
+    orders = [o for o in paper_trading.get_orders() if o.get("position_id") == position_id]
+
+    return {
+        "success": True,
+        "position": target_pos,
+        "timeline": sorted(events, key=lambda x: x.get("ts", 0)),
+        "orders": orders,
+        "metrics": {
+            "mfe": target_pos.get("mfe", 0.0),
+            "mae": target_pos.get("mae", 0.0),
+            "breakeven_triggered": bool(target_pos.get("breakeven_triggered", 0)),
+            "holding_period_seconds": (target_pos.get("closed_at") or time.time()) - target_pos.get("created_at", 0)
+        }
+    }
+
+@app.post("/api/paper/positions/{position_id}/update_stop")
+async def update_position_stop(position_id: str, payload: Dict[str, Any] = Body(...)):
+    """Update position stop loss with strict monotonic validation."""
+    new_stop = payload.get("new_stop")
+    if new_stop is None:
+        return {"success": False, "message": "Missing new_stop parameter"}
+    return paper_trading.update_stop_loss(position_id, float(new_stop))
+
 @app.post("/api/paper/tick")
 async def paper_tick():
     tf = "1H"
@@ -469,24 +556,46 @@ async def paper_tick():
     if hasattr(setup, "model_dump"):
         setup = setup.model_dump()
 
-    paper_trading.mark_to_market(status.current_price)
+    # Pass bar high/low for conservative tie-breaker
+    h1_candles = candles_by_tf.get("1H", [])
+    last_h1 = h1_candles[-1] if h1_candles else None
+    high_val = last_h1.high if last_h1 else status.current_price
+    low_val = last_h1.low if last_h1 else status.current_price
+
+    paper_trading.mark_to_market(status.current_price, high=high_val, low=low_val)
     decision = paper_trading.evaluate(
         setup,
         status.current_price,
         status.last_update_timestamp,
         status.is_stale,
     )
+
+    # Telemetry logging to RejectionInspector if setup was evaluated but rejected
+    if not decision.get("accepted") and setup and setup.get("name"):
+        global_rejection_inspector.record_rejection(
+            model=setup.get("name", "SMC Setup"),
+            stage_failed=decision.get("reason", "RISK_REJECTION"),
+            reasons=[decision.get("message") or decision.get("reason") or "Setup rejected by risk controller"],
+            evaluated_price=status.current_price,
+            setup_id=setup.get("id"),
+            direction=setup.get("direction"),
+            telemetry=decision.get("telemetry", {})
+        )
+
     return {
         "success": True,
         "decision": decision,
         "status": paper_trading.status(),
         "active_setup": setup,
+        "model_a_setup": analysis.get("model_a_setup"),
+        "model_b_setup": analysis.get("model_b_setup"),
         "terminal_state": terminal,
         "market": {
             "price": status.current_price,
             "timestamp": status.last_update_timestamp,
             "is_stale": status.is_stale,
             "connection_status": status.connection_status,
+            "feed_state": adapter.get_feed_state()
         },
     }
 
@@ -507,8 +616,8 @@ async def simulate_demo_trade():
         "top": round(price + 2.0, 2),
         "bottom": round(price - 2.0, 2),
         "invalidation_price": round(price - 10.0, 2),
-        "target_price": round(price + 20.0, 2),
-        "rr_ratio": 2.0,
+        "target_price": round(price + 50.0, 2),
+        "rr_ratio": 5.0,
         "timestamp": ts,
     }
     decision = paper_trading.evaluate(demo_setup, price, ts, False)
@@ -573,7 +682,7 @@ frontend_dir = os.path.join(os.path.dirname(__file__), "..", "frontend")
 if os.path.exists(frontend_dir):
     app.mount("/static", StaticFiles(directory=frontend_dir), name="static")
 
-@app.get("/")
+@app.api_route("/", methods=["GET", "HEAD"])
 async def serve_index():
     index_path = os.path.join(frontend_dir, "index.html")
     if os.path.exists(index_path):

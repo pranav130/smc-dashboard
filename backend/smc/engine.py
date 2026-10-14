@@ -21,7 +21,7 @@ from backend.smc.models import (
 )
 from backend.smc.fvg import calculate_fvgs, find_overlapping_fvgs
 from backend.smc.structure import (
-    find_swings, calculate_bos, calculate_support_resistance, get_trend_state
+    find_swings, calculate_bos, calculate_support_resistance, get_trend_state, _atr
 )
 from backend.smc.displacement import (
     find_displacement_candles, find_order_blocks
@@ -37,6 +37,7 @@ from backend.smc.psychological import calculate_psychological_levels
 from backend.smc.ranking import rank_key_levels
 from backend.smc.activation import generate_watchlist, global_alert_store
 from backend.smc.liquidity_intelligence import analyze_liquidity_intelligence
+from backend.smc.strategies import evaluate_model_a, evaluate_model_b
 
 
 class SMCEngine:
@@ -66,8 +67,9 @@ class SMCEngine:
         m30_candles = candles_by_tf.get("30M", [])
         m15_candles = candles_by_tf.get("15M", [])
 
-        # Current market price
+        # Current market price & volatility
         current_price = current_candles[-1].close if current_candles else 0.0
+        atr_val = _atr(current_candles, 14) if current_candles else 5.0
 
         # 1. Fair Value Gaps (1D, 4H, 1H, and Current TF)
         daily_fvgs = calculate_fvgs(daily_candles, "1D", config)
@@ -305,9 +307,9 @@ class SMCEngine:
                 extreme_reasons.extend(reasons)
             elif entry.state == "CHECKLIST REVIEW":
                 t_state = "ACTIVE"
-            elif entry.state in ["SETUP TO INSPECT", "REACTION DEVELOPING", "AT KEY LEVEL", "APPROACHING"]:
+            elif entry.state in ["SETUP TO INSPECT", "REACTION DEVELOPING", "AT LEVEL", "AT KEY LEVEL", "APPROACHING"]:
                 t_state = "WATCH"
-            elif entry.state == "SWEPT / MITIGATED":
+            elif entry.state in ["PASSED / INVALIDATED", "INVALIDATED / PASSED", "SWEPT / MITIGATED"]:
                 t_state = "INVALIDATED"
             else:
                 t_state = "IDLE"
@@ -375,7 +377,7 @@ class SMCEngine:
             elif is_stop_breached:
                 t_state = "INVALIDATED"
                 state_reason = f"Invalidation level breached (${inval_price:.2f}). Setup stopped out."
-            elif entry.state in ["SWEPT / MITIGATED", "INVALIDATED / PASSED"]:
+            elif entry.state in ["PASSED / INVALIDATED", "SWEPT / MITIGATED", "INVALIDATED / PASSED"]:
                 t_state = "INVALIDATED"
                 state_reason = entry.state_reason
             elif is_extreme:
@@ -384,7 +386,7 @@ class SMCEngine:
             elif entry.state == "CHECKLIST REVIEW":
                 t_state = "ACTIVE"
                 state_reason = entry.state_reason
-            elif entry.state in ["SETUP TO INSPECT", "REACTION DEVELOPING", "AT KEY LEVEL", "APPROACHING"]:
+            elif entry.state in ["SETUP TO INSPECT", "REACTION DEVELOPING", "AT LEVEL", "AT KEY LEVEL", "APPROACHING"]:
                 t_state = "WATCH"
                 state_reason = entry.state_reason
             else:
@@ -453,6 +455,35 @@ class SMCEngine:
             )
             candidate_setups.append((t_state, entry.score, abs(entry.distance), setup_card))
 
+        # Independent Strategy Models: Model A (Sweep & Retrace) & Model B (Trendline Break)
+        model_a_setup, model_a_telemetry = evaluate_model_a(
+            current_price=current_price,
+            candles_1h=h1_candles if h1_candles else current_candles,
+            daily_trend=daily_trend_state,
+            h4_trend=h4_trend_state,
+            h4_fvgs=h4_fvgs,
+            h1_fvgs=h1_fvgs,
+            liquidity_levels=all_liquidity,
+            bos_signals=bos_signals,
+            displacement_candles=displacement_candles,
+            atr_val=atr_val,
+            is_stale=is_stale
+        )
+        if model_a_setup:
+            candidate_setups.append((model_a_setup.state, 95, abs(model_a_setup.distance), model_a_setup))
+
+        model_b_setup, model_b_telemetry = evaluate_model_b(
+            current_price=current_price,
+            candles_1h=h1_candles if h1_candles else current_candles,
+            trendlines=trendlines,
+            swings=h1_swings if h1_candles else swings,
+            h1_fvgs=h1_fvgs,
+            atr_val=atr_val,
+            is_stale=is_stale
+        )
+        if model_b_setup:
+            candidate_setups.append((model_b_setup.state, 90, abs(model_b_setup.distance), model_b_setup))
+
         # Overall setup state determination
         state_order = {"EXTREME": 5000, "ACTIVE": 4000, "WATCH": 2000, "INVALIDATED": 100, "IDLE": 0}
         if any(c[0] == "EXTREME" for c in candidate_setups):
@@ -502,6 +533,80 @@ class SMCEngine:
             config=config
         )
 
+        # 13. Synthesize Recent Structural Events Feed
+        raw_events = []
+        for l in all_liquidity:
+            if getattr(l, "swept", False):
+                raw_events.append({
+                    "timestamp": getattr(l, "sweep_time", 0) or 0,
+                    "ist_time": getattr(l, "sweep_ist", None) or "Recent",
+                    "type": "LIQUIDITY_SWEEP",
+                    "title": f"Liquidity Sweep · {l.label}",
+                    "detail": f"Price swept resting liquidity at ${l.price:.2f} ({getattr(l, 'swept_by_timeframe', None) or 'Current TF'}). Closed back inside.",
+                    "timeframe": getattr(l, "swept_by_timeframe", None) or tf,
+                    "badge": "SWEEP",
+                    "badge_color": "var(--gold)"
+                })
+
+        for tl in trendlines:
+            if tl.broken:
+                note = f" ({tl.structural_support_note})" if tl.structural_support_note else ""
+                raw_events.append({
+                    "timestamp": tl.breakout_time or 0,
+                    "ist_time": tl.breakout_ist or "Recent",
+                    "type": "TRENDLINE_BREAK",
+                    "title": f"{tl.timeframe} {tl.direction.upper()} Trendline Break",
+                    "detail": f"Confirmed breakout with {tl.touch_count} touches, projection ${tl.current_projected_price:.2f}{note}.",
+                    "timeframe": tl.timeframe,
+                    "badge": "TL BREAK",
+                    "badge_color": "var(--purple-extreme)"
+                })
+
+        for d in displacement_candles[-6:]:
+            raw_events.append({
+                "timestamp": d.time,
+                "ist_time": d.ist_time or "Recent",
+                "type": "DISPLACEMENT",
+                "title": f"{d.timeframe} {d.direction.capitalize()} Displacement",
+                "detail": f"Institutional expansion candle (body: ${d.body_size:.2f}, {d.body_atr_ratio:.1f}x ATR).",
+                "timeframe": d.timeframe,
+                "badge": "DISPLACEMENT",
+                "badge_color": "var(--teal-bull)" if d.direction == "bullish" else "var(--red-bear)"
+            })
+
+        for b in bos_signals[-6:]:
+            raw_events.append({
+                "timestamp": b.time,
+                "ist_time": getattr(b, "ist_time", None) or "Recent",
+                "type": "STRUCTURE_BREAK",
+                "title": f"{b.kind} ({b.type.upper()})",
+                "detail": f"Confirmed structure break at ${b.broken_level:.2f} (Retracement: {b.retracement_pct:.1f}%).",
+                "timeframe": getattr(b, "timeframe", tf),
+                "badge": b.kind,
+                "badge_color": "var(--blue)"
+            })
+
+        for a in active_alerts:
+            raw_events.append({
+                "timestamp": a.timestamp,
+                "ist_time": a.ist_time or "Recent",
+                "type": "STATE_ALERT",
+                "title": f"{a.level_name} ({a.timeframe})",
+                "detail": a.message,
+                "timeframe": a.timeframe,
+                "badge": str(a.state),
+                "badge_color": "var(--gold)"
+            })
+
+        raw_events.sort(key=lambda x: x.get("timestamp", 0), reverse=True)
+        seen_events = set()
+        recent_events = []
+        for ev in raw_events:
+            key = (ev["type"], ev["title"], ev.get("timestamp", 0))
+            if key not in seen_events:
+                seen_events.add(key)
+                recent_events.append(ev)
+
         return {
             "timeframe": tf,
             "current_price": current_price,
@@ -531,7 +636,12 @@ class SMCEngine:
             "key_levels_summary": [r.model_dump() for r in ranked_levels],
             "watchlist": [w.model_dump() for w in watchlist_entries],
             "active_alerts": [a.model_dump() for a in active_alerts],
+            "recent_events": recent_events[:15],
             "state_counts": state_counts,
             "opposing_warnings": opposing_warnings,
-            "liquidity_intelligence": liquidity_intelligence.model_dump()
+            "liquidity_intelligence": liquidity_intelligence.model_dump(),
+            "model_a_setup": model_a_setup.model_dump() if model_a_setup else None,
+            "model_a_telemetry": model_a_telemetry,
+            "model_b_setup": model_b_setup.model_dump() if model_b_setup else None,
+            "model_b_telemetry": model_b_telemetry
         }

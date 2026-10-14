@@ -16,9 +16,12 @@ from backend.config import (
     REVERSE_TIMEFRAME_MAP,
     TIMEFRAME_SECONDS,
     IST_TZ,
+    UTC_TZ,
+    CONTRACT_MULTIPLIER,
+    TICK_SIZE,
 )
 from backend.adapters.base import BaseMarketDataAdapter
-from backend.smc.models import Candle
+from backend.smc.models import Candle, MarketDataStatus
 
 logger = logging.getLogger("DeltaAdapter")
 logging.basicConfig(level=logging.INFO)
@@ -49,6 +52,7 @@ class DeltaExchangeAdapter(BaseMarketDataAdapter):
     """
     Dedicated Market Data Adapter for Delta Exchange India.
     Connects to official REST API and WebSocket candle stream for XAUTUSD / .DEXAUTUSD.
+    Enforces UTC-native timestamps, strict candle validation, and observable feed states.
     """
 
     def __init__(self, base_rest_url: str = DELTA_REST_URL, ws_url: str = DELTA_WS_URL):
@@ -61,6 +65,7 @@ class DeltaExchangeAdapter(BaseMarketDataAdapter):
         self._ws_task: Optional[asyncio.Task] = None
         self._poll_task: Optional[asyncio.Task] = None
         self.use_polling_fallback = False
+        self.has_invalid_data = False
 
         # In-memory candle storage: timeframe -> list of confirmed Candle
         self.candles: Dict[str, List[Candle]] = {
@@ -89,6 +94,10 @@ class DeltaExchangeAdapter(BaseMarketDataAdapter):
         """Convert unix timestamp in seconds to formatted IST string."""
         return datetime.fromtimestamp(ts, tz=IST_TZ).strftime("%Y-%m-%d %H:%M:%S IST")
 
+    def format_utc(self, ts: int) -> str:
+        """Convert unix timestamp in seconds to formatted UTC string."""
+        return datetime.fromtimestamp(ts, tz=UTC_TZ).strftime("%Y-%m-%d %H:%M:%S UTC")
+
     def _normalize_candle(self, raw: dict, is_forming: bool = False) -> Optional[Candle]:
         """Validate and normalize raw candle dictionary to Candle model."""
         try:
@@ -116,9 +125,13 @@ class DeltaExchangeAdapter(BaseMarketDataAdapter):
             # Index candles have no contract volume; safely default to 0.0
             v = float(raw_v) if raw_v is not None else 0.0
 
-            # Validation
+            # Strict bounds validation: positive prices
+            if o <= 0 or h <= 0 or l <= 0 or c <= 0:
+                self.has_invalid_data = True
+                return None
+
+            # Validation and correction of anomalies
             if h < l or h < o or h < c or l > o or l > c:
-                # Sanity adjustment if tick anomalies occur
                 h = max(h, o, c)
                 l = min(l, o, c)
 
@@ -130,10 +143,12 @@ class DeltaExchangeAdapter(BaseMarketDataAdapter):
                 close=c,
                 volume=v,
                 is_forming=is_forming,
-                ist_time=self.format_ist(ts)
+                ist_time=self.format_ist(ts),
+                utc_time=self.format_utc(ts)
             )
         except Exception as e:
             logger.warning(f"Failed to normalize candle: {raw}, error: {e}")
+            self.has_invalid_data = True
             return None
 
     async def fetch_historical_candles(
@@ -410,12 +425,42 @@ class DeltaExchangeAdapter(BaseMarketDataAdapter):
             self._poll_task.cancel()
         logger.info("Delta adapter streaming stopped.")
 
+    def get_feed_state(self) -> str:
+        """
+        Derive strict feed state for Section 3 requirement:
+        CONNECTED, STALE, DISCONNECTED, INVALID DATA, RECOVERING
+        """
+        if self.has_invalid_data:
+            return "INVALID DATA"
+        if not self.is_running or self.connection_status == "Disconnected":
+            return "DISCONNECTED"
+        if self.connection_status in ("Reconnecting", "Connecting") or self.use_polling_fallback:
+            return "RECOVERING"
+        
+        now = int(time.time())
+        age = now - self.last_successful_update if self.last_successful_update > 0 else 999999
+        if age > 120:  # More than 2 minutes without update
+            return "STALE"
+        
+        return "CONNECTED"
+
     def get_connection_status(self) -> str:
         """Return the current connection status."""
-        # Check staleness: if no update in > 45 seconds while running
-        if self.connection_status == "Connected" and (time.time() - self.last_successful_update > 45):
+        state = self.get_feed_state()
+        if state == "CONNECTED":
+            return "Connected"
+        elif state == "STALE":
             return "Delayed"
-        return self.connection_status
+        elif state == "RECOVERING":
+            return "Polling Fallback" if self.use_polling_fallback else "Reconnecting"
+        elif state == "INVALID DATA":
+            return "Invalid Data"
+        return "Disconnected"
+
+    def get_confirmed_candles(self, timeframe: str) -> List[Candle]:
+        """Return strictly confirmed (closed) candles only. Excludes forming candle."""
+        tf = timeframe.upper()
+        return list(self.candles.get(tf, []))
 
     def get_candles(self, timeframe: str) -> List[Candle]:
         """Return full candle series including current forming candle."""
@@ -430,3 +475,49 @@ class DeltaExchangeAdapter(BaseMarketDataAdapter):
                 # Replace last candle with updated forming values
                 confirmed[-1] = forming
         return confirmed
+
+    def get_market_data_status(self, symbol: str = DEFAULT_SYMBOL, timeframe: str = "1H") -> MarketDataStatus:
+        """Construct full observable MarketDataStatus instance."""
+        tf = timeframe.upper()
+        candles = self.get_candles(tf)
+        forming = self.forming_candles.get(tf)
+        now = int(time.time())
+        
+        last_candle_ts = candles[-1].time if candles else 0
+        data_age = (now - self.last_successful_update) if self.last_successful_update > 0 else (now - last_candle_ts if last_candle_ts > 0 else 0)
+        curr_price = candles[-1].close if candles else 0.0
+        feed_st = self.get_feed_state()
+
+        warnings = []
+        if feed_st in ("STALE", "DISCONNECTED", "INVALID DATA"):
+            warnings.append(f"Feed in {feed_st} state. Signals and order entries are locked.")
+        if len(candles) < MIN_24H_CANDLES.get(tf, 25):
+            warnings.append(f"Insufficient history for {tf} ({len(candles)}/{MIN_24H_CANDLES.get(tf, 25)} candles).")
+
+        return MarketDataStatus(
+            instrument_name="Tether Gold Token Perpetual Future" if "XAUT" in symbol else symbol,
+            symbol=symbol,
+            product_id=131253 if "XAUT" in symbol else 0,
+            contract_type="perpetual_futures",
+            quote_currency="USD",
+            settling_currency="USD",
+            contract_value=f"{CONTRACT_MULTIPLIER} XAUT",
+            contract_multiplier=CONTRACT_MULTIPLIER,
+            tick_size=TICK_SIZE,
+            data_provider="Delta Exchange India",
+            selected_timeframe=tf,
+            last_candle_timestamp=last_candle_ts,
+            last_candle_ist=self.format_ist(last_candle_ts) if last_candle_ts > 0 else "",
+            last_candle_utc=self.format_utc(last_candle_ts) if last_candle_ts > 0 else "",
+            last_update_timestamp=self.last_successful_update,
+            last_update_ist=self.format_ist(self.last_successful_update) if self.last_successful_update > 0 else "",
+            last_update_utc=self.format_utc(self.last_successful_update) if self.last_successful_update > 0 else "",
+            data_age_seconds=max(0, data_age),
+            heartbeat_ok=(feed_st in ("CONNECTED", "RECOVERING")),
+            feed_state=feed_st,
+            connection_status=self.get_connection_status(),
+            candle_state="Forming" if forming is not None else "Confirmed",
+            current_price=curr_price,
+            is_stale=(feed_st == "STALE" or data_age > 120),
+            warnings=warnings,
+        )

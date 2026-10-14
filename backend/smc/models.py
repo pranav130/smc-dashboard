@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 # ---------------------------------------------------------------------------
 
 class Candle(BaseModel):
-    time: int                  # Unix epoch timestamp in seconds
+    time: int                  # Unix epoch timestamp in seconds (UTC)
     open: float
     high: float
     low: float
@@ -19,6 +19,7 @@ class Candle(BaseModel):
     volume: float = 0.0
     is_forming: bool = False   # True if this is the currently forming live candle
     ist_time: Optional[str] = None
+    utc_time: Optional[str] = None
 
 
 class MarketDataStatus(BaseModel):
@@ -29,23 +30,28 @@ class MarketDataStatus(BaseModel):
     quote_currency: str = "USD"
     settling_currency: str = "USD"
     contract_value: str = "0.001 XAUT"
+    contract_multiplier: float = 0.001
     tick_size: float = 0.01
     data_provider: str = "Delta Exchange India"
     selected_timeframe: str = "1H"
     last_candle_timestamp: int = 0
     last_candle_ist: str = ""
+    last_candle_utc: str = ""
     last_update_timestamp: int = 0
     last_update_ist: str = ""
-    connection_status: Literal["Connected", "Reconnecting", "Delayed", "Disconnected", "Polling Fallback"] = "Disconnected"
+    last_update_utc: str = ""
+    data_age_seconds: int = 0
+    heartbeat_ok: bool = True
+    feed_state: Literal["CONNECTED", "STALE", "DISCONNECTED", "INVALID DATA", "RECOVERING"] = "DISCONNECTED"
+    connection_status: str = "Disconnected"
     candle_state: Literal["Confirmed", "Forming"] = "Confirmed"
     current_price: float = 0.0
     is_stale: bool = False
     warnings: List[str] = Field(default_factory=list)
-    # Disclosure: Delta perpetual vs spot basis
     basis_disclosure: str = (
         "XAUTUSD is a perpetual futures contract on Delta Exchange India. "
-        "Mark price typically trades 0.06%–0.18% above TradingView XAUUSD spot "
-        "due to normal perpetual funding premium. This is expected and disclosed."
+        "Mark price typically trades 0.06%–0.18% above spot gold benchmark "
+        "due to normal perpetual funding premium. Contract multiplier = 0.001 XAUT."
     )
 
 
@@ -70,6 +76,14 @@ class FairValueGap(BaseModel):
     inverted: bool = False                # True if price closed fully through, flipping role
     inverted_at: Optional[int] = None
     size: float = 0.0                     # Gap size in price units
+
+    @property
+    def freshness(self) -> str:
+        return self.mitigation_level
+
+    @property
+    def time(self) -> int:
+        return self.start_time
 
 
 # ---------------------------------------------------------------------------
@@ -234,6 +248,10 @@ class Trendline(BaseModel):
     current_projected_price: Optional[float] = None
     # Was the break confirmed by a close (not just a wick)?
     break_confirmed_by_close: bool = False
+    # Structural evidence before break:
+    has_higher_low_pre_break: bool = False
+    has_lower_high_pre_break: bool = False
+    structural_support_note: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------
@@ -258,6 +276,10 @@ class LevelRanking(BaseModel):
     swept: Optional[bool] = None
     score: int = 0                               # Ranking score (higher = more significant)
     score_reason: str = ""                       # Plain-language reason for score
+    priority: Literal["High", "Medium", "Low"] = "Medium"  # Deterministic priority ranking
+    priority_reason: str = ""                    # Transparent justification for priority
+    opposing_zone_nearby: Optional[str] = None   # Overhead or supporting opposing HTF zone
+    interaction_state: Optional[str] = None      # Current activation/interaction state
     source_id: Optional[str] = None             # Original zone ID
 
 
@@ -353,14 +375,39 @@ class AnalysisConfig(BaseModel):
 # ---------------------------------------------------------------------------
 
 ActivationState = Literal[
-    "INACTIVE",
+    "WAITING",
     "APPROACHING",
-    "AT KEY LEVEL",
+    "AT LEVEL",
     "REACTION DEVELOPING",
     "SETUP TO INSPECT",
     "CHECKLIST REVIEW",
-    "INVALIDATED / PASSED"
+    "PASSED / INVALIDATED",
+    # Legacy / alias compatibility
+    "INACTIVE",
+    "AT KEY LEVEL",
+    "INVALIDATED / PASSED",
+    "SWEPT / MITIGATED"
 ]
+
+
+class CanonicalState(str):
+    """Canonical Activation State that compares equal to legacy aliases for backward compatibility."""
+    def __eq__(self, other):
+        if super().__eq__(other):
+            return True
+        aliases = {
+            "WAITING": "INACTIVE",
+            "INACTIVE": "WAITING",
+            "AT LEVEL": "AT KEY LEVEL",
+            "AT KEY LEVEL": "AT LEVEL",
+            "PASSED / INVALIDATED": "INVALIDATED / PASSED",
+            "INVALIDATED / PASSED": "PASSED / INVALIDATED",
+            "SWEPT / MITIGATED": "PASSED / INVALIDATED"
+        }
+        return aliases.get(str(self)) == other or aliases.get(str(other)) == str(self)
+
+    def __hash__(self):
+        return super().__hash__()
 
 
 class ChecklistItem(BaseModel):
@@ -385,8 +432,12 @@ class WatchlistEntry(BaseModel):
     distance: float                       # Signed distance to current price
     distance_pct: float
     freshness: str = "Active"             # "unmitigated", "partial_50", "swept", "active"
-    state: ActivationState = "INACTIVE"
+    state: ActivationState = "WAITING"
     state_reason: str = ""
+    priority: Literal["High", "Medium", "Low"] = "Medium"  # Deterministic priority ranking
+    priority_reason: str = ""                    # Explicit reason for priority
+    relevant_event: Optional[str] = None         # Latest confirmed liquidity or structure event
+    opposing_zone_nearby: Optional[str] = None   # Opposing HTF zone that could obstruct move
     evidence: List[str] = Field(default_factory=list)
     checklist: List[ChecklistItem] = Field(default_factory=list)
     opposing_zone_warning: Optional[str] = None

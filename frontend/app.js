@@ -608,10 +608,29 @@ function clearOverlayLines() {
 }
 
 // Collision-Aware Price Line Creator:
-// Prevents overlapping price axis scale badges when lines are within 1.20 USD of each other
-// Collision-Aware Price Line Creator:
 // Prevents overlapping price axis scale badges when lines are within 4.50 USD of each other
 function addCollisionAwarePriceLine(opts) {
+  if (!candleSeries || !opts || opts.price == null) return null;
+
+  // Universal Sanity Guard:
+  // Support / Buy levels must NEVER appear above current market price.
+  // Resistance / Sell levels must NEVER appear below current market price.
+  const curPrice = latestCandle ? latestCandle.close : 0;
+  if (curPrice > 0 && opts.price !== undefined && opts.price !== null) {
+    const titleLower = (opts.title || "").toLowerCase();
+    const isSupport = (titleLower.includes("support") || titleLower.includes("buy")) && !titleLower.includes("sell");
+    const isResistance = (titleLower.includes("resistance") || titleLower.includes("sell")) && !titleLower.includes("buy");
+
+    if (isSupport && opts.price > curPrice + 0.50) {
+      console.warn(`[Sanity Guard Rejected] Support/Buy level above market price: ${opts.title} at ${opts.price} (curPrice: ${curPrice})`);
+      return null;
+    }
+    if (isResistance && opts.price < curPrice - 0.50) {
+      console.warn(`[Sanity Guard Rejected] Resistance/Sell level below market price: ${opts.title} at ${opts.price} (curPrice: ${curPrice})`);
+      return null;
+    }
+  }
+
   const COLLISION_THRESHOLD = 4.50; // $4.50 USD minimum separation on price axis (~0.11% on Gold)
   let showAxis = opts.axisLabelVisible !== false;
   if (showAxis && opts.price !== undefined && opts.price !== null) {
@@ -688,16 +707,21 @@ function drawSMCLevels(analysis) {
   // 2. Higher Timeframe Fair Value Gaps (1D & 4H FVGs) - Always visible in both modes!
   // Daily and 4H FVGs are separated so 4H FVGs never hide Daily FVGs.
   // -------------------------------------------------------------------------
+  // -------------------------------------------------------------------------
+  // 2. Higher Timeframe Fair Value Gaps (1D & 4H FVGs) - Always visible in both modes!
+  // Daily and 4H FVGs are separated so 4H FVGs never hide Daily FVGs.
+  // Bearish FVGs act as overhead resistance (above price), Bullish FVGs act as support (below price).
+  // -------------------------------------------------------------------------
   if (layerToggles.htfFvg) {
-    // 2a. Daily FVGs (nearest unmitigated above and below)
+    // 2a. Daily FVGs (nearest unmitigated overhead resistance & underlying support)
     const dailyFvgs = (analysis.daily_fvgs || []).filter((f) => !f.mitigated && !f.inverted);
-    const dAbove = dailyFvgs.filter((f) => f.midpoint > curPrice).sort((a, b) => a.midpoint - b.midpoint).slice(0, 1);
-    const dBelow = dailyFvgs.filter((f) => f.midpoint <= curPrice).sort((a, b) => b.midpoint - a.midpoint).slice(0, 1);
+    const dAbove = dailyFvgs.filter((f) => f.midpoint > curPrice && f.direction === "bearish").sort((a, b) => a.midpoint - b.midpoint).slice(0, 1);
+    const dBelow = dailyFvgs.filter((f) => f.midpoint <= curPrice && f.direction === "bullish").sort((a, b) => b.midpoint - a.midpoint).slice(0, 1);
 
-    // 2b. 4H FVGs (nearest unmitigated above and below)
+    // 2b. 4H FVGs (nearest unmitigated overhead resistance & underlying support)
     const h4Fvgs = (analysis.h4_fvgs || []).filter((f) => !f.mitigated && !f.inverted);
-    const h4Above = h4Fvgs.filter((f) => f.midpoint > curPrice).sort((a, b) => a.midpoint - b.midpoint).slice(0, 2);
-    const h4Below = h4Fvgs.filter((f) => f.midpoint <= curPrice).sort((a, b) => b.midpoint - a.midpoint).slice(0, 2);
+    const h4Above = h4Fvgs.filter((f) => f.midpoint > curPrice && f.direction === "bearish").sort((a, b) => a.midpoint - b.midpoint).slice(0, 2);
+    const h4Below = h4Fvgs.filter((f) => f.midpoint <= curPrice && f.direction === "bullish").sort((a, b) => b.midpoint - a.midpoint).slice(0, 2);
 
     const allHtfFvgs = [...dAbove, ...dBelow, ...h4Above, ...h4Below];
     allHtfFvgs.forEach((f) => {
@@ -719,13 +743,14 @@ function drawSMCLevels(analysis) {
 
   // -------------------------------------------------------------------------
   // 3. Higher Timeframe Order Blocks (4H OBs) - Always visible in both modes!
+  // Bullish OB = Support (at or below price); Bearish OB = Resistance (at or above price)
   // -------------------------------------------------------------------------
   if (layerToggles.orderBlocks) {
     const h4Obs = (analysis.order_blocks || []).filter(
-      (ob) => ob.timeframe === "4H" && !ob.mitigated
+      (ob) => ob.timeframe === "4H" && !ob.mitigated && !ob.is_breaker
     );
-    const h4Bull = h4Obs.filter((o) => o.direction === "bullish").slice(-1);
-    const h4Bear = h4Obs.filter((o) => o.direction === "bearish").slice(-1);
+    const h4Bull = h4Obs.filter((o) => o.direction === "bullish" && o.midpoint <= curPrice).slice(-1);
+    const h4Bear = h4Obs.filter((o) => o.direction === "bearish" && o.midpoint >= curPrice).slice(-1);
     [...h4Bull, ...h4Bear].forEach((ob) => {
       const isBull = ob.direction === "bullish";
       const obColor = isBull ? "#00b49f" : "#f23645"; // Green for Bullish, Red for Bearish
@@ -743,10 +768,10 @@ function drawSMCLevels(analysis) {
     // In Focus OFF mode, also display nearest 1H intermediate Order Block
     if (!focusSetupMode) {
       const h1Obs = (analysis.order_blocks || []).filter(
-        (ob) => ob.timeframe === "1H" && !ob.mitigated
+        (ob) => ob.timeframe === "1H" && !ob.mitigated && !ob.is_breaker
       );
-      const h1Bull = h1Obs.filter((o) => o.direction === "bullish").slice(-1);
-      const h1Bear = h1Obs.filter((o) => o.direction === "bearish").slice(-1);
+      const h1Bull = h1Obs.filter((o) => o.direction === "bullish" && o.midpoint <= curPrice).slice(-1);
+      const h1Bear = h1Obs.filter((o) => o.direction === "bearish" && o.midpoint >= curPrice).slice(-1);
       [...h1Bull, ...h1Bear].forEach((ob) => {
         const isBull = ob.direction === "bullish";
         addCollisionAwarePriceLine({
@@ -771,10 +796,13 @@ function drawSMCLevels(analysis) {
   // -------------------------------------------------------------------------
 
   // 4a. Trendlines: Green for Support (Buying), Red for Resistance (Selling)
+  // Strict SMC Rule:
+  // - Support (Buy) TL MUST NOT be broken AND MUST be at or below current price.
+  // - Resistance (Sell) TL MUST NOT be broken AND MUST be at or above current price.
   if (layerToggles.trendlines) {
     const tls = analysis.trendlines || [];
-    const resTl = tls.filter((t) => t.direction === "resistance").slice(0, 1);
-    const supTl = tls.filter((t) => t.direction === "support").slice(0, 1);
+    const supTl = tls.filter((t) => t.direction === "support" && !t.broken && t.current_projected_price && t.current_projected_price <= curPrice).slice(0, 1);
+    const resTl = tls.filter((t) => t.direction === "resistance" && !t.broken && t.current_projected_price && t.current_projected_price >= curPrice).slice(0, 1);
     [...resTl, ...supTl].forEach((tl) => {
       if (tl.current_projected_price) {
         const isSup = tl.direction === "support";
@@ -793,8 +821,8 @@ function drawSMCLevels(analysis) {
   // 4b. Current Timeframe FVGs (1H / 30M)
   if (layerToggles.ltfFvg && (currentTf === "1H" || currentTf === "30M")) {
     const ltfList = (analysis.timeframe_fvgs || []).filter((f) => !f.mitigated && !f.inverted);
-    const ltfAbove = ltfList.filter((f) => f.midpoint > curPrice).sort((a, b) => a.midpoint - b.midpoint).slice(0, 1);
-    const ltfBelow = ltfList.filter((f) => f.midpoint <= curPrice).sort((a, b) => b.midpoint - a.midpoint).slice(0, 1);
+    const ltfAbove = ltfList.filter((f) => f.midpoint > curPrice && f.direction === "bearish").sort((a, b) => a.midpoint - b.midpoint).slice(0, 1);
+    const ltfBelow = ltfList.filter((f) => f.midpoint <= curPrice && f.direction === "bullish").sort((a, b) => b.midpoint - a.midpoint).slice(0, 1);
     [...ltfAbove, ...ltfBelow].forEach((f) => {
       const isBullish = f.direction === "bullish";
       addCollisionAwarePriceLine({

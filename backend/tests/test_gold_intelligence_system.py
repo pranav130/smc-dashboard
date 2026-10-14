@@ -251,3 +251,25 @@ def test_recent_events_synthesis_feed():
     timestamps = [ev["timestamp"] for ev in events]
     assert timestamps == sorted(timestamps, reverse=True)
 
+
+def test_support_trendline_marked_broken_when_price_below():
+    """Verify that an ascending support trendline is marked broken when current price drops below it."""
+    # Ascending lows: L1=4160 at t=100, L2=4165 at t=200
+    # Final candle closes at 4100 (below projected support line)
+    candles = [
+        make_candle(100, 4162, 4170, 4160, 4165),
+        make_candle(150, 4165, 4175, 4164, 4172),
+        make_candle(200, 4170, 4175, 4165, 4173),
+        make_candle(250, 4170, 4172, 4140, 4130),
+        make_candle(300, 4130, 4135, 4095, 4100),  # price dropped to 4100
+    ]
+    swings = find_swings(candles, "15M", window=1)
+    cfg = AnalysisConfig(trendline_break_requires_close=True)
+    tls = calculate_trendlines(candles, swings, "15M", cfg)
+    
+    # Any support trendlines returned must be marked broken=True because price is 4100 < projected support
+    sup_tls = [t for t in tls if t.direction == "support"]
+    for st in sup_tls:
+        if st.current_projected_price and st.current_projected_price > 4100:
+            assert st.broken is True, f"Support TL projecting at {st.current_projected_price} must be marked broken when price is 4100"
+

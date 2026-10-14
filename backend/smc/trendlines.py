@@ -94,6 +94,10 @@ def calculate_trendlines(
                         note = "Higher low confirmed prior to breakout"
 
                 proj_price = round(h1.price + slope * (current_time - h1.time), 2)
+                if not broken and candles and candles[-1].close > proj_price:
+                    broken = True
+                    breakout_time = candles[-1].time
+                    breakout_ist = candles[-1].ist_time
 
                 tl_id = f"tl_res_{timeframe}_{h1.time}_{h2.time}"
                 trendlines.append(Trendline(
@@ -170,6 +174,10 @@ def calculate_trendlines(
                         note = "Lower high confirmed prior to breakdown"
 
                 proj_price = round(l1.price + slope * (current_time - l1.time), 2)
+                if not broken and candles and candles[-1].close < proj_price:
+                    broken = True
+                    breakout_time = candles[-1].time
+                    breakout_ist = candles[-1].ist_time
 
                 tl_id = f"tl_sup_{timeframe}_{l1.time}_{l2.time}"
                 trendlines.append(Trendline(

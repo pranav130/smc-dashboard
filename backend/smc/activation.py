@@ -384,6 +384,14 @@ def evaluate_level_activation(
                     if tl.broken and tl.breakout_time:
                         # Check recency
                         if current_candles and (current_candles[-1].time - tl.breakout_time) <= (recent_tl_window * 3600):
+                            # Directional alignment:
+                            # Bullish setup (buying at support) requires breakout of descending RESISTANCE trendline
+                            # Bearish setup (selling at resistance) requires breakdown of ascending SUPPORT trendline
+                            if direction == "bullish" and tl.direction != "resistance":
+                                continue
+                            if direction == "bearish" and tl.direction != "support":
+                                continue
+
                             trendline_break_found = True
                             checklist[2].satisfied = True
                             checklist[2].evidence = (

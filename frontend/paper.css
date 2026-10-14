@@ -748,12 +748,558 @@
   gap: 8px;
 }
 
+/* ==========================================================================
+   INSTITUTIONAL RISK & DISCIPLINE HUD STYLES
+   ========================================================================== */
+.hud-section {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 18px;
+  margin-bottom: 20px;
+}
+
+.hud-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.hud-title h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+}
+
+.hud-subtitle {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.hud-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: var(--teal-bull-bg);
+  border: 1px solid var(--teal-bull-border);
+  color: var(--teal-bull);
+}
+
+.hud-badge.danger {
+  background: var(--red-bear-bg);
+  border-color: var(--red-bear-border);
+  color: var(--red-bear);
+}
+
+.pulse-dot-green {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background-color: var(--teal-bull);
+  box-shadow: 0 0 6px var(--teal-bull);
+}
+
+.hud-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
+
+.hud-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.hud-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.hud-card-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.hud-card-stat {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.hud-progress-bar {
+  width: 100%;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.hud-progress-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: var(--teal-bull);
+  transition: width 0.3s ease, background 0.3s ease;
+}
+
+.hud-progress-fill.warn {
+  background: var(--amber-watch);
+}
+
+.hud-progress-fill.danger {
+  background: var(--red-bear);
+}
+
+.hud-card-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 10px;
+  color: var(--text-dim);
+}
+
+.hud-status-tag {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+.hud-status-tag.safe {
+  background: var(--teal-bull-bg);
+  color: var(--teal-bull);
+}
+
+.hud-status-tag.warn {
+  background: var(--amber-watch-bg);
+  color: var(--amber-watch);
+}
+
+.hud-status-tag.danger {
+  background: var(--red-bear-bg);
+  color: var(--red-bear);
+}
+
+.hud-discipline-details {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.discipline-pill {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+}
+
+.disc-label {
+  color: var(--text-muted);
+}
+
+.disc-val {
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+
+/* ==========================================================================
+   DUAL STRATEGY PIPELINE STYLES
+   ========================================================================== */
+.strategy-dual-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.strategy-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  border-radius: 6px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.strategy-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--border-subtle);
+  padding-bottom: 8px;
+}
+
+.strat-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.strat-title h4 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.strat-tag {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 3px;
+  letter-spacing: 0.4px;
+}
+
+.tag-model-a {
+  background: rgba(41, 182, 246, 0.15);
+  border: 1px solid rgba(41, 182, 246, 0.4);
+  color: #29b6f6;
+}
+
+.tag-model-b {
+  background: rgba(168, 85, 247, 0.15);
+  border: 1px solid rgba(168, 85, 247, 0.4);
+  color: #a855f7;
+}
+
+.strat-status-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-muted);
+}
+
+.strat-status-badge.active {
+  background: var(--teal-bull-bg);
+  border: 1px solid var(--teal-bull-border);
+  color: var(--teal-bull);
+}
+
+.strat-status-badge.candidate {
+  background: var(--amber-watch-bg);
+  border: 1px solid var(--amber-watch-border);
+  color: var(--amber-watch);
+}
+
+.strat-params-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  background: rgba(0, 0, 0, 0.2);
+  padding: 10px;
+  border-radius: 4px;
+}
+
+.strat-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.strat-checklist {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 11px;
+}
+
+.checklist-title {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  margin-bottom: 2px;
+}
+
+.checklist-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-dim);
+}
+
+.checklist-item.passed {
+  color: var(--teal-bull);
+}
+
+.checklist-item.failed {
+  color: var(--red-bear);
+}
+
+.chk-icon {
+  font-weight: 700;
+}
+
+/* ==========================================================================
+   REJECTION INSPECTOR & STRATEGY LAB
+   ========================================================================== */
+.inspector-controls-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border-subtle);
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.inspector-summary-pills {
+  display: flex;
+  gap: 10px;
+}
+
+.mini-pill {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  padding: 4px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.backtest-control-panel {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.backtest-settings {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.inline-group {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+
+.backtest-disclaimer {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.wf-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.wf-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  border-radius: 6px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.wf-card.highlight-card {
+  border-color: var(--teal-bull-border);
+  background: rgba(0, 180, 159, 0.05);
+}
+
+.wf-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--border-subtle);
+  padding-bottom: 8px;
+}
+
+.wf-tag {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-muted);
+  letter-spacing: 0.5px;
+}
+
+.oos-tag {
+  color: var(--teal-bull);
+}
+
+.wf-pnl {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.wf-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.wf-stat-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.wf-stat-row strong {
+  font-family: var(--font-mono);
+  color: var(--text-main);
+}
+
+.mc-section {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  padding: 14px 16px;
+}
+
+.mc-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.mc-header h4 {
+  margin: 0;
+  font-size: 13px;
+}
+
+.mc-badge {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  background: rgba(168, 85, 247, 0.15);
+  color: #a855f7;
+  font-weight: 600;
+}
+
+.mc-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+.mc-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.mc-label {
+  font-size: 10px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.mc-val {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.mc-sub {
+  font-size: 9px;
+  color: var(--text-dim);
+}
+
+/* ==========================================================================
+   MODAL LARGE & FORENSIC REPLAY
+   ========================================================================== */
+.modal-lg {
+  max-width: 780px;
+  width: 90%;
+}
+
+.replay-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  padding: 12px;
+  margin-bottom: 14px;
+}
+
+.replay-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.replay-excursion-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.excursion-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.excursion-card.bull {
+  border-color: var(--teal-bull-border);
+}
+
+.excursion-card.bear {
+  border-color: var(--red-bear-border);
+}
+
+.exc-title {
+  font-size: 10px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.exc-val {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.exc-sub {
+  font-size: 9px;
+  color: var(--text-dim);
+}
+
 @media (max-width: 900px) {
   .paper-header {
     flex-direction: column;
     align-items: flex-start;
   }
-  .metrics-grid {
-    grid-template-columns: repeat(2, 1fr);
+  .metrics-grid, .hud-grid, .strategy-dual-grid, .wf-grid, .mc-grid {
+    grid-template-columns: 1fr;
   }
 }

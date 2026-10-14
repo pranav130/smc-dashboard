@@ -55,6 +55,7 @@
     <div class="header-badges">
       <span class="badge-paper-safe">PAPER ONLY — NO REAL ORDERS</span>
       <span class="badge-engine" id="engineStatusBadge">STOPPED</span>
+      <button class="btn-sm btn-outline-sync" id="btnPaperThemeToggle" title="Toggle Light / Dark Theme">🌓 Theme</button>
     </div>
   </header>
 
@@ -89,6 +90,77 @@
         <button class="btn-ctrl btn-warning" id="btnResetStop" title="Clear emergency stop lock" style="display:none;">🔓 Clear Stop Lock</button>
         <button class="btn-ctrl btn-secondary" id="btnCloseAll" title="Close all open paper positions immediately">Close All Positions</button>
         <button class="btn-ctrl btn-reset" id="btnResetAccount" title="Reset paper account ledger to starting balance">Reset Account</button>
+      </div>
+    </section>
+
+    <!-- 3.5 INSTITUTIONAL RISK & DISCIPLINE HUD -->
+    <section class="hud-section">
+      <div class="hud-header">
+        <div class="hud-title">
+          <h3>Institutional Risk &amp; Discipline HUD</h3>
+          <span class="hud-subtitle">Mandatory Pre-Trade Enforcement · Section 6</span>
+        </div>
+        <div class="hud-badge" id="hudStatusBadge">
+          <span class="pulse-dot-green"></span>
+          <span id="hudStatusText">ALL SAFEGUARDS NORMAL</span>
+        </div>
+      </div>
+      <div class="hud-grid">
+        <!-- 1.0% Daily Loss Limit -->
+        <div class="hud-card">
+          <div class="hud-card-head">
+            <span class="hud-card-label">Daily Loss Circuit Breaker</span>
+            <span class="hud-card-stat" id="hudDailyLossStat">0.00% / 1.00%</span>
+          </div>
+          <div class="hud-progress-bar">
+            <div class="hud-progress-fill" id="hudDailyLossFill" style="width: 0%;"></div>
+          </div>
+          <div class="hud-card-foot">
+            <span id="hudDailyLossDesc">$0.00 loss of $100.00 max limit</span>
+            <span class="hud-reset-clock" id="hudDailyLossClock">00:00 UTC Reset</span>
+          </div>
+        </div>
+
+        <!-- 5.0% Peak-to-Trough Drawdown -->
+        <div class="hud-card">
+          <div class="hud-card-head">
+            <span class="hud-card-label">Peak-to-Trough Drawdown</span>
+            <span class="hud-card-stat" id="hudDrawdownStat">0.00% / 5.00%</span>
+          </div>
+          <div class="hud-progress-bar">
+            <div class="hud-progress-fill" id="hudDrawdownFill" style="width: 0%;"></div>
+          </div>
+          <div class="hud-card-foot">
+            <span id="hudDrawdownDesc">$0.00 from peak equity</span>
+            <span class="hud-status-tag safe" id="hudDrawdownTag">HEALTHY</span>
+          </div>
+        </div>
+
+        <!-- Anti-Revenge & Discipline Protocol -->
+        <div class="hud-card">
+          <div class="hud-card-head">
+            <span class="hud-card-label">Discipline &amp; Anti-Revenge</span>
+            <span class="hud-card-stat" id="hudDisciplineStat">READY</span>
+          </div>
+          <div class="hud-discipline-details">
+            <div class="discipline-pill" id="hudCooldownPill">
+              <span class="disc-label">Cooldown:</span>
+              <span class="disc-val" id="hudCooldownVal">None Active</span>
+            </div>
+            <div class="discipline-pill">
+              <span class="disc-label">Daily Quota:</span>
+              <span class="disc-val" id="hudDailyQuotaVal">0 / 3 Trades</span>
+            </div>
+            <div class="discipline-pill">
+              <span class="disc-label">Consec. Losses:</span>
+              <span class="disc-val" id="hudConsecLossesVal">0</span>
+            </div>
+          </div>
+          <div class="hud-card-foot">
+            <span>Section 6.3 Rules Enforced</span>
+            <span class="hud-status-tag safe" id="hudDisciplineTag">CLEAR</span>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -151,62 +223,139 @@
       </div>
     </section>
 
-    <!-- 5. CONFIRMED-SIGNAL PANEL -->
+    <!-- 5. DUAL SMC STRATEGY PIPELINES (DECOUPLED EVALUATION) -->
     <section class="panel-section">
       <div class="panel-header">
         <div class="panel-title-group">
-          <h2>Confirmed SMC Signal Pipeline</h2>
-          <span class="panel-badge">1H PIPELINE SOURCE</span>
+          <h2>Deterministic SMC Strategy Pipelines</h2>
+          <span class="panel-badge">MODELS A &amp; B DECOUPLED</span>
         </div>
         <div class="panel-actions">
-          <span class="eligibility-tag" id="signalEligibilityTag">WAITING FOR SIGNAL</span>
+          <span class="eligibility-tag" id="signalEligibilityTag">WAITING FOR SETUP</span>
         </div>
       </div>
-      <div class="signal-details-grid" id="signalDetailsGrid">
-        <div class="signal-field">
-          <span class="field-label">Setup ID</span>
-          <span class="field-value mono-val" id="sigSetupId">—</span>
+
+      <div class="strategy-dual-grid">
+        <!-- MODEL A: SMC SWEEP & RETRACEMENT -->
+        <div class="strategy-card" id="cardModelA">
+          <div class="strategy-card-header">
+            <div class="strat-title">
+              <span class="strat-tag tag-model-a">MODEL A</span>
+              <h4>SMC Sweep &amp; Retracement</h4>
+            </div>
+            <span class="strat-status-badge" id="modelAStatusBadge">SCANNING</span>
+          </div>
+
+          <div class="strat-params-grid">
+            <div class="strat-field">
+              <span class="field-label">Direction</span>
+              <span class="field-value mono-val" id="modelADirection">—</span>
+            </div>
+            <div class="strat-field">
+              <span class="field-label">Planned Entry</span>
+              <span class="field-value mono-val" id="modelAEntry">—</span>
+            </div>
+            <div class="strat-field">
+              <span class="field-label">Stop Loss</span>
+              <span class="field-value mono-val text-bear" id="modelAStop">—</span>
+            </div>
+            <div class="strat-field">
+              <span class="field-label">Take Profit</span>
+              <span class="field-value mono-val text-bull" id="modelATarget">—</span>
+            </div>
+            <div class="strat-field">
+              <span class="field-label">Net R:R</span>
+              <span class="field-value mono-val" id="modelARr">—</span>
+            </div>
+            <div class="strat-field">
+              <span class="field-label">Setup ID</span>
+              <span class="field-value mono-val" id="modelASetupId">—</span>
+            </div>
+          </div>
+
+          <!-- Model A Confluence Checklist -->
+          <div class="strat-checklist">
+            <div class="checklist-title">SMC Confluence Checklist:</div>
+            <div class="checklist-item" id="chkADailyBias">
+              <span class="chk-icon">○</span> <span class="chk-text">Daily Bias Filter (Trend/Regime Alignment)</span>
+            </div>
+            <div class="checklist-item" id="chkA4hZone">
+              <span class="chk-icon">○</span> <span class="chk-text">4H Key Zone / Liquidity Anchor</span>
+            </div>
+            <div class="checklist-item" id="chkA1hSweep">
+              <span class="chk-icon">○</span> <span class="chk-text">1H Confirmed Liquidity Sweep</span>
+            </div>
+            <div class="checklist-item" id="chkAMss">
+              <span class="chk-icon">○</span> <span class="chk-text">Confirmed Market Structure Shift (MSS) / Displacement</span>
+            </div>
+            <div class="checklist-item" id="chkARetrace">
+              <span class="chk-icon">○</span> <span class="chk-text">Discount/Premium Retracement (FVG Entry)</span>
+            </div>
+          </div>
         </div>
-        <div class="signal-field">
-          <span class="field-label">Symbol / Timeframe</span>
-          <span class="field-value mono-val" id="sigSymbolTf">XAUTUSD · 1H</span>
-        </div>
-        <div class="signal-field">
-          <span class="field-label">Direction</span>
-          <span class="field-value" id="sigDirection">—</span>
-        </div>
-        <div class="signal-field">
-          <span class="field-label">Setup State</span>
-          <span class="field-value" id="sigState">—</span>
-        </div>
-        <div class="signal-field">
-          <span class="field-label">Entry Zone</span>
-          <span class="field-value mono-val" id="sigEntryZone">—</span>
-        </div>
-        <div class="signal-field">
-          <span class="field-label">Planned Entry</span>
-          <span class="field-value mono-val" id="sigEntryPrice">—</span>
-        </div>
-        <div class="signal-field">
-          <span class="field-label">Stop Loss</span>
-          <span class="field-value mono-val text-bear" id="sigStopLoss">—</span>
-        </div>
-        <div class="signal-field">
-          <span class="field-label">Take Profit</span>
-          <span class="field-value mono-val text-bull" id="sigTakeProfit">—</span>
-        </div>
-        <div class="signal-field">
-          <span class="field-label">Risk/Reward</span>
-          <span class="field-value mono-val" id="sigRrRatio">—</span>
-        </div>
-        <div class="signal-field">
-          <span class="field-label">Activation Time</span>
-          <span class="field-value mono-val" id="sigActivationTime">—</span>
+
+        <!-- MODEL B: STRUCTURAL TRENDLINE BREAK -->
+        <div class="strategy-card" id="cardModelB">
+          <div class="strategy-card-header">
+            <div class="strat-title">
+              <span class="strat-tag tag-model-b">MODEL B</span>
+              <h4>Structural Trendline Break</h4>
+            </div>
+            <span class="strat-status-badge" id="modelBStatusBadge">SCANNING</span>
+          </div>
+
+          <div class="strat-params-grid">
+            <div class="strat-field">
+              <span class="field-label">Direction</span>
+              <span class="field-value mono-val" id="modelBDirection">—</span>
+            </div>
+            <div class="strat-field">
+              <span class="field-label">Planned Entry</span>
+              <span class="field-value mono-val" id="modelBEntry">—</span>
+            </div>
+            <div class="strat-field">
+              <span class="field-label">Stop Loss</span>
+              <span class="field-value mono-val text-bear" id="modelBStop">—</span>
+            </div>
+            <div class="strat-field">
+              <span class="field-label">Take Profit</span>
+              <span class="field-value mono-val text-bull" id="modelBTarget">—</span>
+            </div>
+            <div class="strat-field">
+              <span class="field-label">Net R:R</span>
+              <span class="field-value mono-val" id="modelBRr">—</span>
+            </div>
+            <div class="strat-field">
+              <span class="field-label">Setup ID</span>
+              <span class="field-value mono-val" id="modelBSetupId">—</span>
+            </div>
+          </div>
+
+          <!-- Model B Confluence Checklist -->
+          <div class="strat-checklist">
+            <div class="checklist-title">Trendline Confluence Checklist:</div>
+            <div class="checklist-item" id="chkBMinTouches">
+              <span class="chk-icon">○</span> <span class="chk-text">Confirmed Pivots (&gt;= 3 Touches)</span>
+            </div>
+            <div class="checklist-item" id="chkBGeometry">
+              <span class="chk-icon">○</span> <span class="chk-text">Valid Geometric Slope &amp; Span</span>
+            </div>
+            <div class="checklist-item" id="chkBBreakout">
+              <span class="chk-icon">○</span> <span class="chk-text">Close-Confirmed Breakout / Breakdown</span>
+            </div>
+            <div class="checklist-item" id="chkBFoundation">
+              <span class="chk-icon">○</span> <span class="chk-text">Pre-Break Structural Foundation</span>
+            </div>
+            <div class="checklist-item" id="chkBRr">
+              <span class="chk-icon">○</span> <span class="chk-text">Structural Stop &amp; Net R:R &gt;= 2.0</span>
+            </div>
+          </div>
         </div>
       </div>
+
       <div class="signal-status-box" id="sigReasonBox">
-        <span class="status-box-title">Paper Eligibility Diagnostic:</span>
-        <span class="status-box-text" id="sigDiagnosticText">No active signal in market engine. Only setups confirmed strictly as ACTIVE are eligible.</span>
+        <span class="status-box-title">Execution State &amp; Priority Router:</span>
+        <span class="status-box-text" id="sigDiagnosticText">Monitoring 1H market structure across decoupled Model A &amp; Model B. Only setups confirmed strictly with state ACTIVE are eligible for paper entry.</span>
       </div>
     </section>
 
@@ -244,14 +393,17 @@
       </div>
     </section>
 
-    <!-- 7. ORDERS & TRADE HISTORY TABS -->
+    <!-- 7. MULTI-PANEL TABS: TRADES, ORDERS, REJECTIONS, STRATEGY LAB, AUDIT -->
     <section class="panel-section">
       <div class="panel-header">
         <div class="tab-controls">
           <button class="tab-btn active" id="tabBtnTrades">Completed Trades</button>
           <button class="tab-btn" id="tabBtnOrders">Simulated Orders</button>
+          <button class="tab-btn" id="tabBtnRejections">Rejection Inspector</button>
+          <button class="tab-btn" id="tabBtnBacktest">Strategy Lab (Backtest)</button>
+          <button class="tab-btn" id="tabBtnEvents">Audit Events</button>
         </div>
-        <div class="filter-controls">
+        <div class="filter-controls" id="tradesFilterControls">
           <input type="text" class="input-search" id="filterSearch" placeholder="Filter Setup ID / ID...">
           <select class="select-filter" id="filterDirection">
             <option value="ALL">All Directions</option>
@@ -261,7 +413,7 @@
         </div>
       </div>
 
-      <!-- TRADES VIEW -->
+      <!-- 1. TRADES VIEW -->
       <div class="tab-content" id="viewTrades">
         <div class="table-responsive">
           <table class="paper-table" id="tableTrades">
@@ -279,16 +431,17 @@
                 <th>Exit Reason</th>
                 <th>Opened</th>
                 <th>Closed</th>
+                <th>Forensics</th>
               </tr>
             </thead>
             <tbody id="tbodyTrades">
-              <tr><td colspan="12" class="empty-state">No completed trades yet.</td></tr>
+              <tr><td colspan="13" class="empty-state">No completed trades yet.</td></tr>
             </tbody>
           </table>
         </div>
       </div>
 
-      <!-- ORDERS VIEW -->
+      <!-- 2. ORDERS VIEW -->
       <div class="tab-content" id="viewOrders" style="display: none;">
         <div class="table-responsive">
           <table class="paper-table" id="tableOrders">
@@ -312,44 +465,278 @@
           </table>
         </div>
       </div>
-    </section>
 
-    <!-- 8. AUDIT & EVENT LOG -->
-    <section class="panel-section">
-      <div class="panel-header">
-        <div class="panel-title-group">
-          <h2>Simulated Execution Audit Log</h2>
-          <span class="count-pill" id="eventCountBadge">0 Events</span>
+      <!-- 3. REJECTION INSPECTOR VIEW -->
+      <div class="tab-content" id="viewRejections" style="display: none;">
+        <div class="inspector-controls-bar">
+          <div class="inspector-summary-pills">
+            <div class="mini-pill">
+              <span class="muted-label">TOTAL REJECTED</span>
+              <span class="mono-val" id="rejTotalCount">0</span>
+            </div>
+            <div class="mini-pill">
+              <span class="muted-label">PRIMARY BOTTLENECK</span>
+              <span class="mono-val" id="rejPrimaryStage">—</span>
+            </div>
+          </div>
+          <div class="filter-controls">
+            <select class="select-filter" id="filterRejModel">
+              <option value="">All Models</option>
+              <option value="Model A">Model A (Sweep)</option>
+              <option value="Model B">Model B (Trendline)</option>
+            </select>
+            <select class="select-filter" id="filterRejStage">
+              <option value="">All Pipeline Stages</option>
+              <option value="DATA_HEALTH">Data Health</option>
+              <option value="DAILY_BIAS">Daily Bias</option>
+              <option value="LIQUIDITY_SWEEP">Liquidity Sweep</option>
+              <option value="MSS_DISPLACEMENT">MSS / Displacement</option>
+              <option value="TRENDLINE_CONFIRMATION">Trendline Geometry</option>
+              <option value="RETRACEMENT_ZONE">Entry Zone / FVG</option>
+              <option value="RISK_VALIDATION">Risk / R:R Validation</option>
+            </select>
+            <button class="btn-sm btn-outline-sync" id="btnRefreshRejections">Refresh Rejections</button>
+          </div>
         </div>
-        <div class="filter-controls">
-          <button class="btn-sm btn-outline-sync" id="btnClearAuditFilter">Reset Filter</button>
+        <div class="table-responsive">
+          <table class="paper-table" id="tableRejections">
+            <thead>
+              <tr>
+                <th style="width: 150px;">Timestamp</th>
+                <th>Setup ID</th>
+                <th>Model</th>
+                <th>Failed Stage</th>
+                <th>Evaluated Price</th>
+                <th>Rejection Diagnosis</th>
+              </tr>
+            </thead>
+            <tbody id="tbodyRejections">
+              <tr><td colspan="6" class="empty-state">No rejected setups recorded in ring-buffer.</td></tr>
+            </tbody>
+          </table>
         </div>
       </div>
-      <div class="table-responsive">
-        <table class="paper-table table-audit" id="tableEvents">
-          <thead>
-            <tr>
-              <th style="width: 170px;">Timestamp</th>
-              <th style="width: 180px;">Event Type</th>
-              <th style="width: 150px;">Setup ID</th>
-              <th>Details &amp; Audit Diagnostic</th>
-            </tr>
-          </thead>
-          <tbody id="tbodyEvents">
-            <tr><td colspan="4" class="empty-state">No execution events recorded.</td></tr>
-          </tbody>
-        </table>
+
+      <!-- 4. STRATEGY LAB / BACKTEST VIEW -->
+      <div class="tab-content" id="viewBacktest" style="display: none;">
+        <div class="backtest-control-panel">
+          <div class="backtest-settings">
+            <div class="form-group inline-group">
+              <label for="backtestModelSelect">Strategy Pipeline:</label>
+              <select class="select-filter" id="backtestModelSelect">
+                <option value="COMBINED">Combined (Model A + Model B Portfolio)</option>
+                <option value="MODEL_A">Model A Only (SMC Sweep &amp; Retracement)</option>
+                <option value="MODEL_B">Model B Only (Structural Trendline Break)</option>
+              </select>
+            </div>
+            <button class="btn-ctrl btn-start" id="btnRunBacktest">⚡ Run Walk-Forward Validation (60/20/20)</button>
+          </div>
+          <div class="backtest-disclaimer">
+            <span>Realistic Walk-Forward Evaluation · 10 bps round-trip fees/slippage · 1,000-sample Monte Carlo</span>
+          </div>
+        </div>
+
+        <div id="backtestResultsArea" style="display: none;">
+          <!-- Walk Forward Split Cards -->
+          <div class="wf-grid">
+            <div class="wf-card" id="cardTrainSet">
+              <div class="wf-card-header">
+                <span class="wf-tag">TRAIN (60%)</span>
+                <span class="wf-pnl text-bull" id="trainNetPnl">—</span>
+              </div>
+              <div class="wf-stats">
+                <div class="wf-stat-row"><span>Trades:</span><strong id="trainTrades">—</strong></div>
+                <div class="wf-stat-row"><span>Win Rate:</span><strong id="trainWinRate">—</strong></div>
+                <div class="wf-stat-row"><span>Profit Factor:</span><strong id="trainPf">—</strong></div>
+                <div class="wf-stat-row"><span>Max Drawdown:</span><strong id="trainMaxDd">—</strong></div>
+              </div>
+            </div>
+
+            <div class="wf-card" id="cardValSet">
+              <div class="wf-card-header">
+                <span class="wf-tag">VALIDATION (20%)</span>
+                <span class="wf-pnl text-bull" id="valNetPnl">—</span>
+              </div>
+              <div class="wf-stats">
+                <div class="wf-stat-row"><span>Trades:</span><strong id="valTrades">—</strong></div>
+                <div class="wf-stat-row"><span>Win Rate:</span><strong id="valWinRate">—</strong></div>
+                <div class="wf-stat-row"><span>Profit Factor:</span><strong id="valPf">—</strong></div>
+                <div class="wf-stat-row"><span>Max Drawdown:</span><strong id="valMaxDd">—</strong></div>
+              </div>
+            </div>
+
+            <div class="wf-card highlight-card" id="cardTestSet">
+              <div class="wf-card-header">
+                <span class="wf-tag oos-tag">TEST / OUT-OF-SAMPLE (20%)</span>
+                <span class="wf-pnl text-bull" id="testNetPnl">—</span>
+              </div>
+              <div class="wf-stats">
+                <div class="wf-stat-row"><span>Trades:</span><strong id="testTrades">—</strong></div>
+                <div class="wf-stat-row"><span>Win Rate:</span><strong id="testWinRate">—</strong></div>
+                <div class="wf-stat-row"><span>Profit Factor:</span><strong id="testPf">—</strong></div>
+                <div class="wf-stat-row"><span>Max Drawdown:</span><strong id="testMaxDd">—</strong></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Monte Carlo Analysis -->
+          <div class="mc-section">
+            <div class="mc-header">
+              <h4>Monte Carlo Robustness Analysis (1,000 Iterations)</h4>
+              <span class="mc-badge">95% Drawdown Bounds</span>
+            </div>
+            <div class="mc-grid">
+              <div class="mc-card">
+                <span class="mc-label">95% Max DD Upper Bound</span>
+                <span class="mc-val text-bear" id="mcMaxDdP95">—</span>
+                <span class="mc-sub">Worst 5% tail risk</span>
+              </div>
+              <div class="mc-card">
+                <span class="mc-label">Median Drawdown</span>
+                <span class="mc-val" id="mcMaxDdMedian">—</span>
+                <span class="mc-sub">50th percentile expectation</span>
+              </div>
+              <div class="mc-card">
+                <span class="mc-label">Risk of Ruin (&gt;10% DD)</span>
+                <span class="mc-val" id="mcRuinProb">—</span>
+                <span class="mc-sub">Probability of touching 10% drawdown</span>
+              </div>
+              <div class="mc-card">
+                <span class="mc-label">Median Final Equity</span>
+                <span class="mc-val" id="mcMedianEquity">—</span>
+                <span class="mc-sub">Sampled return distribution</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 5. EVENTS VIEW -->
+      <div class="tab-content" id="viewEvents" style="display: none;">
+        <div class="table-responsive">
+          <table class="paper-table table-audit" id="tableEvents">
+            <thead>
+              <tr>
+                <th style="width: 170px;">Timestamp</th>
+                <th style="width: 180px;">Event Type</th>
+                <th style="width: 150px;">Setup ID</th>
+                <th>Details &amp; Audit Diagnostic</th>
+              </tr>
+            </thead>
+            <tbody id="tbodyEvents">
+              <tr><td colspan="4" class="empty-state">No execution events recorded.</td></tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </section>
 
     <!-- FOOTNOTE DISCLAIMER -->
     <footer class="paper-footer">
       <p class="disclaimer-text">
-        <strong>Paper Trading Architecture &amp; Boundary Notice:</strong> This simulation engine executes strictly in local SQLite and memory. No Delta Exchange private authentication, API keys, or live order-routing calls are loaded or invoked. Fill prices, slippage, and fees are calculated using standard institutional paper execution models. Market data is fed directly from the Delta Exchange Spot Index feed (<code class="mono-code">.DEXAUTUSD</code>).
+        <strong>Paper Trading Architecture &amp; Boundary Notice:</strong> This simulation engine executes strictly in local SQLite and memory. No Delta Exchange private authentication, API keys, or live order-routing calls are loaded or invoked. Fill prices, slippage, and fees are calculated using standard institutional paper execution models. Market data is fed directly from the Delta Exchange Spot Index feed (<code class="mono-code">.DEXAUTUSD</code>) and Perpetual Futures Mark Price (<code class="mono-code">XAUTUSD</code>).
       </p>
     </footer>
 
   </main>
+
+  <!-- MODAL: FORENSIC TRADE REPLAY -->
+  <div class="modal-overlay" id="modalTradeReplay" style="display: none;">
+    <div class="modal-card modal-lg">
+      <div class="modal-header">
+        <h3>Forensic Trade Reconstruction</h3>
+        <button class="modal-close" id="btnCloseReplayModal">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="replay-summary-grid">
+          <div class="replay-item"><span class="field-label">Position ID</span><span class="mono-val" id="replayPosId">—</span></div>
+          <div class="replay-item"><span class="field-label">Setup ID</span><span class="mono-val" id="replaySetupId">—</span></div>
+          <div class="replay-item"><span class="field-label">Direction</span><span id="replayDir">—</span></div>
+          <div class="replay-item"><span class="field-label">Entry (Filled)</span><span class="mono-val" id="replayEntry">—</span></div>
+          <div class="replay-item"><span class="field-label">Exit (Filled)</span><span class="mono-val" id="replayExit">—</span></div>
+          <div class="replay-item"><span class="field-label">Net P&amp;L</span><span class="mono-val" id="replayNetPnl">—</span></div>
+        </div>
+
+        <div class="replay-excursion-grid">
+          <div class="excursion-card bull">
+            <span class="exc-title">Max Favorable Excursion (MFE)</span>
+            <span class="exc-val text-bull" id="replayMfe">$0.00</span>
+            <span class="exc-sub" id="replayMfeR">Peak floating profit</span>
+          </div>
+          <div class="excursion-card bear">
+            <span class="exc-title">Max Adverse Excursion (MAE)</span>
+            <span class="exc-val text-bear" id="replayMae">$0.00</span>
+            <span class="exc-sub" id="replayMaeR">Max draw against entry</span>
+          </div>
+          <div class="excursion-card">
+            <span class="exc-title">Break-Even Milestone</span>
+            <span class="exc-val" id="replayBeStatus">NOT TRIGGERED</span>
+            <span class="exc-sub">Triggered at +1R profit</span>
+          </div>
+          <div class="excursion-card">
+            <span class="exc-title">Holding Duration</span>
+            <span class="exc-val" id="replayDuration">—</span>
+            <span class="exc-sub">Time in position</span>
+          </div>
+        </div>
+
+        <h4 style="margin: 16px 0 8px 0; font-size: 13px;">Execution Event Chronology</h4>
+        <div class="table-responsive">
+          <table class="paper-table table-audit">
+            <thead>
+              <tr>
+                <th style="width: 140px;">Timestamp</th>
+                <th style="width: 160px;">Event</th>
+                <th>Diagnostic Detail</th>
+              </tr>
+            </thead>
+            <tbody id="replayTimelineBody">
+              <tr><td colspan="3" class="empty-state">Loading reconstruction timeline...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-ctrl btn-secondary" id="btnCloseReplayBtn">Close Reconstruction</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: UPDATE MONOTONIC STOP LOSS -->
+  <div class="modal-overlay" id="modalUpdateStop" style="display: none;">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>Monotonic Stop-Loss Adjustment</h3>
+        <button class="modal-close" id="btnCloseStopModal">×</button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-detail-text">
+          <strong>Non-Negotiable Rule #5:</strong> Never widen a protective stop to avoid a loss. Stops may only trail in the direction of profit.
+        </p>
+        <div class="form-group" style="margin-top: 12px;">
+          <label>Position ID</label>
+          <input type="text" id="stopPosId" readonly style="opacity: 0.7;">
+        </div>
+        <div class="form-group">
+          <label>Direction</label>
+          <input type="text" id="stopPosDir" readonly style="opacity: 0.7;">
+        </div>
+        <div class="form-group">
+          <label>Current Stop Loss ($)</label>
+          <input type="text" id="stopCurrentVal" readonly style="opacity: 0.7;">
+        </div>
+        <div class="form-group">
+          <label for="stopNewVal">Proposed New Stop Loss ($)</label>
+          <input type="number" id="stopNewVal" step="0.01">
+        </div>
+        <div id="stopErrorText" class="modal-warning-text" style="display: none;"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-ctrl btn-secondary" id="btnCancelStopModal">Cancel</button>
+        <button class="btn-ctrl btn-start" id="btnSubmitStopUpdate">Submit Monotonic Stop</button>
+      </div>
+    </div>
+  </div>
 
   <!-- MODAL: RISK CONFIGURATION -->
   <div class="modal-overlay" id="modalConfig" style="display: none;">

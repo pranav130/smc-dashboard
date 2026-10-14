@@ -1,6 +1,7 @@
 /**
  * XAUTUSD Dedicated Paper Trading Dashboard Client
- * Real-time monitoring, institutional metrics, and isolated execution controls
+ * Real-time monitoring, institutional metrics, dual decoupled SMC models,
+ * risk & discipline HUD, rejection inspector, strategy lab, and forensic trade replay.
  */
 
 (function () {
@@ -30,6 +31,8 @@
   let paperState = null;
   let activeTab = "trades";
   let isPolling = false;
+  let activeReplayPosId = null;
+  let activeUpdateStopPosId = null;
 
   async function api(url, method = "GET", data = null) {
     const opts = {
@@ -47,6 +50,24 @@
     return res.json();
   }
 
+  // --- THEME MANAGEMENT ---
+  function initTheme() {
+    const savedTheme = localStorage.getItem("smc_theme") || "dark";
+    if (savedTheme === "light") {
+      document.body.classList.add("light-theme");
+    } else {
+      document.body.classList.remove("light-theme");
+    }
+
+    const btn = $("btnPaperThemeToggle");
+    if (btn) {
+      btn.onclick = () => {
+        const isLight = document.body.classList.toggle("light-theme");
+        localStorage.setItem("smc_theme", isLight ? "light" : "dark");
+      };
+    }
+  }
+
   // --- RENDER PIPELINE ---
 
   function renderStatus(s, tickResult = null) {
@@ -56,6 +77,8 @@
     const md = s.market_data || {};
     const state = s.engine_state || "STOPPED";
     const isEmergency = Boolean(s.emergency_stop);
+    const rm = s.risk_manager || {};
+    const disc = rm.discipline || {};
 
     // 1. Header market pills
     $("hdrPrice").textContent = md.last_price ? fmtMoney(md.last_price) : "—";
@@ -103,6 +126,15 @@
       banner.className = "paper-banner danger";
       bannerIcon.textContent = "🚨";
       bannerText.textContent = "EMERGENCY STOP IS ACTIVE. All new simulated entries are locked. Clear Stop Lock to reset.";
+    } else if (rm.circuit_breaker_active) {
+      banner.className = "paper-banner danger";
+      bannerIcon.textContent = "🛑";
+      bannerText.textContent = `RISK CIRCUIT BREAKER TRIGGERED: ${rm.circuit_breaker_reason || "Loss limits exceeded"}. Entries locked.`;
+    } else if (disc.active_cooldown) {
+      banner.className = "paper-banner warning";
+      bannerIcon.textContent = "⏳";
+      const remMins = Math.ceil((disc.cooldown_remaining_sec || 0) / 60);
+      bannerText.textContent = `DISCIPLINE COOLDOWN ACTIVE (${disc.cooldown_type}): Paused for ${remMins}m to prevent revenge trading.`;
     } else if (md.is_stale) {
       banner.className = "paper-banner warning";
       bannerIcon.textContent = "⚠️";
@@ -110,7 +142,7 @@
     } else if (state === "RUNNING") {
       banner.className = "paper-banner";
       bannerIcon.textContent = "🟢";
-      bannerText.textContent = "Paper engine running. Actively monitoring for confirmed ACTIVE setups in XAUTUSD.";
+      bannerText.textContent = "Paper engine running. Actively monitoring for confirmed ACTIVE setups in XAUTUSD across decoupled Model A & B.";
     } else if (state === "PAUSED") {
       banner.className = "paper-banner warning";
       bannerIcon.textContent = "⏸️";
@@ -138,6 +170,9 @@
 
     $("btnResetStop").style.display = isEmergency ? "inline-block" : "none";
     $("btnCloseAll").disabled = !s.open_positions || s.open_positions.length === 0;
+
+    // 3.5 INSTITUTIONAL RISK & DISCIPLINE HUD RENDERING
+    renderRiskHud(rm, m, s);
 
     // 4. Account Overview Cards
     $("cardStartBalance").textContent = fmtMoney(m.starting_equity || (s.config && s.config.starting_equity) || 10000);
@@ -169,109 +204,211 @@
     $("cardMaxDrawdown").textContent = (m.max_drawdown_pct || 0).toFixed(2) + "%";
     $("cardMaxDrawdownAmt").textContent = fmtMoney(m.max_drawdown_amount || 0) + " from peak";
 
-    // 5. Confirmed Signal Panel
-    renderSignalPanel(tickResult, s);
+    // 5. Dual SMC Strategy Panels
+    renderDualStrategyPanels(tickResult, s);
 
     // 6. Open Positions Table
     renderPositions(s.open_positions || []);
 
-    // 7. Trades & Orders
-    renderTrades(s.trades || []);
-    renderOrders(s.orders || []);
-
-    // 8. Events
-    renderEvents(s.events || []);
-    $("eventCountBadge").textContent = (s.events ? s.events.length : 0) + " Events";
+    // 7. Active Tab Views
+    if (activeTab === "trades") renderTrades(s.trades || []);
+    if (activeTab === "orders") renderOrders(s.orders || []);
+    if (activeTab === "events") renderEvents(s.events || []);
   }
 
-  function renderSignalPanel(tickResult, s) {
-    const setup = tickResult ? tickResult.active_setup : null;
-    const terminal = tickResult ? tickResult.terminal_state : null;
-    const decision = tickResult ? tickResult.decision : null;
+  // --- 3.5 RISK HUD RENDERER ---
+  function renderRiskHud(rm, m, s) {
+    const dailyLossPct = Number(rm.daily_loss_pct || 0);
+    const dailyLimitPct = Number(rm.daily_loss_limit_pct || 1.0);
+    const ddPct = Number(rm.drawdown_pct || m.max_drawdown_pct || 0);
+    const ddLimitPct = Number(rm.drawdown_limit_pct || 5.0);
+    const disc = rm.discipline || {};
 
-    if (!setup || Object.keys(setup).length === 0) {
-      $("sigSetupId").textContent = "—";
-      $("sigDirection").textContent = "—";
-      $("sigState").textContent = terminal && terminal.setup_state ? terminal.setup_state : "IDLE";
-      $("sigEntryZone").textContent = "—";
-      $("sigEntryPrice").textContent = "—";
-      $("sigStopLoss").textContent = "—";
-      $("sigTakeProfit").textContent = "—";
-      $("sigRrRatio").textContent = "—";
-      $("sigActivationTime").textContent = "—";
+    // 1. Daily Loss Circuit Breaker
+    $("hudDailyLossStat").textContent = `${dailyLossPct.toFixed(2)}% / ${dailyLimitPct.toFixed(2)}%`;
+    const dailyRatio = Math.min(100, Math.max(0, (dailyLossPct / dailyLimitPct) * 100));
+    const dailyFill = $("hudDailyLossFill");
+    dailyFill.style.width = `${dailyRatio}%`;
+    dailyFill.className = "hud-progress-fill " + (dailyRatio >= 100 ? "danger" : dailyRatio >= 70 ? "warn" : "");
 
-      $("signalEligibilityTag").textContent = "NO ACTIVE SETUP";
-      $("signalEligibilityTag").className = "eligibility-tag";
-      $("sigDiagnosticText").textContent =
-        "SMC engine currently reports no active setup. Only signals confirmed strictly with state ACTIVE are eligible for paper entry.";
-      return;
+    const startingEq = Number(m.starting_equity || (s.config && s.config.starting_equity) || 10000);
+    const maxDailyLossDollars = (startingEq * dailyLimitPct) / 100;
+    const currentDailyLossDollars = (startingEq * dailyLossPct) / 100;
+    $("hudDailyLossDesc").textContent = `$${currentDailyLossDollars.toFixed(2)} loss of $${maxDailyLossDollars.toFixed(2)} max`;
+
+    // 2. Drawdown Circuit Breaker
+    $("hudDrawdownStat").textContent = `${ddPct.toFixed(2)}% / ${ddLimitPct.toFixed(2)}%`;
+    const ddRatio = Math.min(100, Math.max(0, (ddPct / ddLimitPct) * 100));
+    const ddFill = $("hudDrawdownFill");
+    ddFill.style.width = `${ddRatio}%`;
+    ddFill.className = "hud-progress-fill " + (ddRatio >= 100 ? "danger" : ddRatio >= 70 ? "warn" : "");
+
+    const ddAmt = Number(m.max_drawdown_amount || 0);
+    $("hudDrawdownDesc").textContent = `$${ddAmt.toFixed(2)} from peak`;
+    const ddTag = $("hudDrawdownTag");
+    if (ddRatio >= 100) {
+      ddTag.textContent = "BREACHED (LOCKED)";
+      ddTag.className = "hud-status-tag danger";
+    } else if (ddRatio >= 70) {
+      ddTag.textContent = "WARNING";
+      ddTag.className = "hud-status-tag warn";
+    } else {
+      ddTag.textContent = "HEALTHY";
+      ddTag.className = "hud-status-tag safe";
     }
 
-    $("sigSetupId").textContent = setup.id || "—";
-    const dir = String(setup.direction || "").toUpperCase();
-    $("sigDirection").textContent = dir === "BULLISH" ? "LONG (Bullish)" : dir === "BEARISH" ? "SHORT (Bearish)" : dir;
-    $("sigDirection").className = "field-value " + (dir === "BULLISH" ? "text-bull" : "text-bear");
+    // 3. Anti-Revenge & Discipline Protocol
+    const discTag = $("hudDisciplineTag");
+    const cdVal = $("hudCooldownVal");
+    const quotaVal = $("hudDailyQuotaVal");
+    const consecVal = $("hudConsecLossesVal");
 
-    const st = setup.state || (terminal ? terminal.setup_state : "—");
-    $("sigState").textContent = st;
-    $("sigState").className = "field-value " + (st === "ACTIVE" ? "text-bull" : "text-bear");
+    quotaVal.textContent = `${disc.trades_today || 0} / ${disc.daily_quota_max || 3} Trades`;
+    consecVal.textContent = String(disc.consecutive_losses || 0);
 
-    const top = setup.top ? fmtMoney(setup.top) : "—";
-    const btm = setup.bottom ? fmtMoney(setup.bottom) : "—";
-    $("sigEntryZone").textContent = `${btm} – ${top}`;
+    if (disc.active_cooldown) {
+      const remSec = disc.cooldown_remaining_sec || 0;
+      const mLeft = Math.floor(remSec / 60);
+      const sLeft = remSec % 60;
+      cdVal.textContent = `${disc.cooldown_type} (${mLeft}m ${sLeft}s)`;
+      cdVal.className = "disc-val text-bear";
+      $("hudDisciplineStat").textContent = "PAUSED (COOLDOWN)";
+      discTag.textContent = "PAUSED";
+      discTag.className = "hud-status-tag warn";
+    } else if ((disc.trades_today || 0) >= (disc.daily_quota_max || 3)) {
+      cdVal.textContent = "Quota Exceeded";
+      $("hudDisciplineStat").textContent = "QUOTA REACHED";
+      discTag.textContent = "QUOTA LOCKED";
+      discTag.className = "hud-status-tag warn";
+    } else {
+      cdVal.textContent = "None (Ready)";
+      cdVal.className = "disc-val text-bull";
+      $("hudDisciplineStat").textContent = "READY";
+      discTag.textContent = "CLEAR";
+      discTag.className = "hud-status-tag safe";
+    }
 
-    $("sigEntryPrice").textContent = setup.price ? fmtMoney(setup.price) : "—";
-    $("sigStopLoss").textContent = setup.invalidation_price ? fmtMoney(setup.invalidation_price) : "—";
-    $("sigTakeProfit").textContent = setup.target_price ? fmtMoney(setup.target_price) : "—";
-    $("sigRrRatio").textContent = setup.rr_ratio ? Number(setup.rr_ratio).toFixed(2) + " R:R" : "—";
-    $("sigActivationTime").textContent = setup.activation_time ? fmtTime(setup.activation_time) : fmtTime(setup.timestamp);
+    // Global HUD Badge
+    const hudBadge = $("hudStatusBadge");
+    const hudStatusText = $("hudStatusText");
+    if (rm.circuit_breaker_active || isEmergency) {
+      hudBadge.className = "hud-badge danger";
+      hudStatusText.textContent = "CIRCUIT BREAKER ENGAGED";
+    } else if (disc.active_cooldown) {
+      hudBadge.className = "hud-badge";
+      hudStatusText.textContent = "DISCIPLINE COOLDOWN ACTIVE";
+    } else {
+      hudBadge.className = "hud-badge";
+      hudStatusText.textContent = "ALL SAFEGUARDS NORMAL";
+    }
+  }
 
-    // Diagnostic & Eligibility evaluation
+  // --- 5. DUAL STRATEGY PANELS RENDERER ---
+  function renderDualStrategyPanels(tickResult, s) {
+    const modelA = tickResult ? tickResult.model_a_setup : null;
+    const modelB = tickResult ? tickResult.model_b_setup : null;
+    const activeSetup = tickResult ? tickResult.active_setup : null;
+    const decision = tickResult ? tickResult.decision : null;
+
+    // Helper to render checklist item
+    const setChk = (id, passed) => {
+      const el = $(id);
+      if (!el) return;
+      el.className = "checklist-item " + (passed ? "passed" : "failed");
+      const icon = el.querySelector(".chk-icon");
+      if (icon) icon.textContent = passed ? "✓" : "○";
+    };
+
+    // Render Model A
+    const bA = $("modelAStatusBadge");
+    if (modelA && modelA.id) {
+      $("modelADirection").textContent = modelA.direction || "—";
+      $("modelADirection").className = "field-value mono-val " + (modelA.direction === "LONG" ? "text-bull" : "text-bear");
+      $("modelAEntry").textContent = modelA.price ? fmtMoney(modelA.price) : "—";
+      $("modelAStop").textContent = modelA.invalidation_price ? fmtMoney(modelA.invalidation_price) : "—";
+      $("modelATarget").textContent = modelA.target_price ? fmtMoney(modelA.target_price) : "—";
+      $("modelARr").textContent = modelA.rr_ratio ? `${Number(modelA.rr_ratio).toFixed(2)} R:R` : "—";
+      $("modelASetupId").textContent = modelA.id || "—";
+
+      bA.textContent = modelA.state || "CANDIDATE";
+      bA.className = "strat-status-badge " + (modelA.state === "ACTIVE" ? "active" : "candidate");
+
+      const diag = modelA.diagnostics || {};
+      setChk("chkADailyBias", diag.daily_bias_aligned !== false);
+      setChk("chkA4hZone", diag.zone_aligned !== false);
+      setChk("chkA1hSweep", diag.sweep_confirmed === true);
+      setChk("chkAMss", diag.displacement_confirmed === true);
+      setChk("chkARetrace", diag.retracement_valid === true);
+    } else {
+      $("modelADirection").textContent = "—";
+      $("modelAEntry").textContent = "—";
+      $("modelAStop").textContent = "—";
+      $("modelATarget").textContent = "—";
+      $("modelARr").textContent = "—";
+      $("modelASetupId").textContent = "—";
+      bA.textContent = "SCANNING";
+      bA.className = "strat-status-badge";
+      ["chkADailyBias", "chkA4hZone", "chkA1hSweep", "chkAMss", "chkARetrace"].forEach((id) => setChk(id, false));
+    }
+
+    // Render Model B
+    const bB = $("modelBStatusBadge");
+    if (modelB && modelB.id) {
+      $("modelBDirection").textContent = modelB.direction || "—";
+      $("modelBDirection").className = "field-value mono-val " + (modelB.direction === "LONG" ? "text-bull" : "text-bear");
+      $("modelBEntry").textContent = modelB.price ? fmtMoney(modelB.price) : "—";
+      $("modelBStop").textContent = modelB.invalidation_price ? fmtMoney(modelB.invalidation_price) : "—";
+      $("modelBTarget").textContent = modelB.target_price ? fmtMoney(modelB.target_price) : "—";
+      $("modelBRr").textContent = modelB.rr_ratio ? `${Number(modelB.rr_ratio).toFixed(2)} R:R` : "—";
+      $("modelBSetupId").textContent = modelB.id || "—";
+
+      bB.textContent = modelB.state || "CANDIDATE";
+      bB.className = "strat-status-badge " + (modelB.state === "ACTIVE" ? "active" : "candidate");
+
+      const diag = modelB.diagnostics || {};
+      setChk("chkBMinTouches", (diag.touches_count || 0) >= 3);
+      setChk("chkBGeometry", diag.geometry_valid !== false);
+      setChk("chkBBreakout", diag.breakout_confirmed === true);
+      setChk("chkBFoundation", diag.foundation_valid !== false);
+      setChk("chkBRr", (modelB.rr_ratio || 0) >= 2.0);
+    } else {
+      $("modelBDirection").textContent = "—";
+      $("modelBEntry").textContent = "—";
+      $("modelBStop").textContent = "—";
+      $("modelBTarget").textContent = "—";
+      $("modelBRr").textContent = "—";
+      $("modelBSetupId").textContent = "—";
+      bB.textContent = "SCANNING";
+      bB.className = "strat-status-badge";
+      ["chkBMinTouches", "chkBGeometry", "chkBBreakout", "chkBFoundation", "chkBRr"].forEach((id) => setChk(id, false));
+    }
+
+    // Priority Router & Overall Diagnostic
     const tag = $("signalEligibilityTag");
     const diag = $("sigDiagnosticText");
 
-    if (decision && decision.accepted) {
-      tag.textContent = "ACCEPTED & EXECUTED";
-      tag.className = "eligibility-tag eligible";
-      diag.textContent = `Setup ${setup.id} successfully initiated paper position #${decision.position_id}.`;
-    } else if (decision && !decision.accepted) {
-      const reason = decision.reason || "REJECTED";
-      if (reason === "DUPLICATE_SETUP") {
-        tag.textContent = "ALREADY POSITIONED";
-        tag.className = "eligibility-tag";
-        diag.textContent = `Setup ${setup.id} has already been executed. Duplicate entry prevented.`;
-      } else if (reason.includes("NOT_ACTIVE")) {
-        tag.textContent = "INELIGIBLE (NOT ACTIVE)";
+    if (activeSetup && activeSetup.id) {
+      if (decision && decision.accepted) {
+        tag.textContent = "ACCEPTED & EXECUTED";
+        tag.className = "eligibility-tag eligible";
+        diag.textContent = `Setup ${activeSetup.id} (${activeSetup.name || "SMC"}) initiated simulated position #${decision.position_id}.`;
+      } else if (decision && !decision.accepted) {
+        tag.textContent = `REJECTED (${decision.reason || "RISK"})`;
         tag.className = "eligibility-tag rejected";
-        diag.textContent = `Setup status is ${st}. Only setups confirmed strictly as ACTIVE are eligible.`;
-      } else if (reason === "PRICE_OUTSIDE_ENTRY_ZONE") {
-        tag.textContent = "WAITING FOR ZONE";
-        tag.className = "eligibility-tag waiting";
-        diag.textContent = `Current market price is outside entry zone [${btm} – ${top}]. Entry deferred.`;
-      } else if (reason === "ENGINE_STOPPED") {
-        tag.textContent = "ENGINE STOPPED";
-        tag.className = "eligibility-tag";
-        diag.textContent = "Paper engine is currently stopped. Start engine to allow automated entries.";
-      } else if (reason === "ENGINE_PAUSED") {
-        tag.textContent = "ENGINE PAUSED";
-        tag.className = "eligibility-tag waiting";
-        diag.textContent = "Engine is paused. New simulated entries are temporarily blocked.";
-      } else if (reason === "MAX_POSITIONS") {
-        tag.textContent = "MAX POSITIONS REACHED";
-        tag.className = "eligibility-tag rejected";
-        diag.textContent = "Maximum concurrent positions limit reached. Blocked from opening additional trades.";
+        diag.textContent = `Setup ${activeSetup.id} rejected: ${decision.message || decision.reason || "Risk control filter"}.`;
       } else {
-        tag.textContent = "REJECTED";
-        tag.className = "eligibility-tag rejected";
-        diag.textContent = `Entry rejected by risk management: ${reason}`;
+        tag.textContent = "ACTIVE SETUP FOUND";
+        tag.className = "eligibility-tag waiting";
+        diag.textContent = `Monitoring active setup ${activeSetup.id} for price entry confirmation.`;
       }
     } else {
-      tag.textContent = "EVALUATING";
+      tag.textContent = "SCANNING MARKET";
       tag.className = "eligibility-tag";
-      diag.textContent = `Monitoring setup ${setup.id} in ${st} state.`;
+      diag.textContent = "Monitoring 1H market structure across decoupled Model A (Sweep) & Model B (Trendline). Only close-confirmed setups in ACTIVE state are routed for entry.";
     }
   }
 
+  // --- 6. OPEN POSITIONS TABLE ---
   function renderPositions(positions) {
     const tbody = $("tbodyPositions");
     tbody.innerHTML = "";
@@ -300,7 +437,13 @@
         <td class="${pnlCls}">${fmtSignedMoney(uPnl)} (${uPnlPct >= 0 ? "+" : ""}${uPnlPct.toFixed(2)}%)</td>
         <td>${fmtMoney(pos.entry_fee)}</td>
         <td>${fmtTime(pos.created_at)}</td>
-        <td><button class="btn-table-action btn-close-pos" data-id="${pos.id}">Close</button></td>
+        <td>
+          <div style="display: flex; gap: 4px;">
+            <button class="btn-table-action btn-update-sl" data-id="${pos.id}" data-dir="${pos.direction}" data-sl="${pos.stop_loss}" data-entry="${pos.entry_price}">Trail SL</button>
+            <button class="btn-table-action btn-replay-trade" data-id="${pos.id}">Replay</button>
+            <button class="btn-table-action btn-close-pos" data-id="${pos.id}">Close</button>
+          </div>
+        </td>
       `;
       tbody.appendChild(tr);
     });
@@ -318,8 +461,25 @@
         }
       };
     });
+
+    tbody.querySelectorAll(".btn-update-sl").forEach((btn) => {
+      btn.onclick = () => {
+        activeUpdateStopPosId = btn.getAttribute("data-id");
+        $("stopPosId").value = activeUpdateStopPosId;
+        $("stopPosDir").value = btn.getAttribute("data-dir");
+        $("stopCurrentVal").value = fmtMoney(btn.getAttribute("data-sl"));
+        $("stopNewVal").value = "";
+        $("stopErrorText").style.display = "none";
+        $("modalUpdateStop").style.display = "flex";
+      };
+    });
+
+    tbody.querySelectorAll(".btn-replay-trade").forEach((btn) => {
+      btn.onclick = () => openTradeReplayModal(btn.getAttribute("data-id"));
+    });
   }
 
+  // --- 7. COMPLETED TRADES TABLE ---
   function renderTrades(trades) {
     const tbody = $("tbodyTrades");
     tbody.innerHTML = "";
@@ -336,7 +496,7 @@
     });
 
     if (filtered.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="12" class="empty-state">No matching completed trades found.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="13" class="empty-state">No matching completed trades found.</td></tr>';
       return;
     }
 
@@ -360,11 +520,17 @@
         <td><span class="mono-code">${t.exit_reason || "CLOSED"}</span></td>
         <td>${fmtTime(t.created_at)}</td>
         <td>${fmtTime(t.closed_at)}</td>
+        <td><button class="btn-table-action btn-replay-trade" data-id="${t.id}">Replay 🔍</button></td>
       `;
       tbody.appendChild(tr);
     });
+
+    tbody.querySelectorAll(".btn-replay-trade").forEach((btn) => {
+      btn.onclick = () => openTradeReplayModal(btn.getAttribute("data-id"));
+    });
   }
 
+  // --- ORDERS TABLE ---
   function renderOrders(orders) {
     const tbody = $("tbodyOrders");
     tbody.innerHTML = "";
@@ -404,6 +570,7 @@
     });
   }
 
+  // --- AUDIT EVENTS TABLE ---
   function renderEvents(events) {
     const tbody = $("tbodyEvents");
     tbody.innerHTML = "";
@@ -434,8 +601,185 @@
     });
   }
 
-  // --- REFRESH & TICK LOOP ---
+  // --- REJECTION INSPECTOR ---
+  async function loadRejections() {
+    const model = $("filterRejModel").value;
+    const stage = $("filterRejStage").value;
+    const url = `/api/paper/rejections?model=${encodeURIComponent(model)}&stage=${encodeURIComponent(stage)}&limit=100`;
 
+    try {
+      const data = await api(url, "GET");
+      const rejections = data.rejections || [];
+      const summary = data.summary || {};
+
+      $("rejTotalCount").textContent = summary.total_rejections || 0;
+      const topStage = Object.entries(summary.by_stage || {}).sort((a, b) => b[1] - a[1])[0];
+      $("rejPrimaryStage").textContent = topStage ? `${topStage[0]} (${topStage[1]})` : "None";
+
+      const tbody = $("tbodyRejections");
+      tbody.innerHTML = "";
+      if (rejections.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="empty-state">No rejected trade setups match the selected filter.</td></tr>';
+        return;
+      }
+
+      rejections.forEach((r) => {
+        const tr = document.createElement("tr");
+        const reasonsStr = (r.reasons || []).join(" | ");
+        tr.innerHTML = `
+          <td>${fmtTime(r.timestamp)}</td>
+          <td>${r.setup_id || "—"}</td>
+          <td><span class="mono-code">${r.model}</span></td>
+          <td><span class="mono-code text-bear">${r.stage_failed}</span></td>
+          <td>${fmtMoney(r.evaluated_price)}</td>
+          <td>${reasonsStr}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    } catch (e) {
+      console.error("Failed to load rejections:", e);
+    }
+  }
+
+  // --- STRATEGY LAB / BACKTEST ---
+  async function runBacktest() {
+    const btn = $("btnRunBacktest");
+    const strategy = $("backtestModelSelect").value;
+    btn.disabled = true;
+    btn.textContent = "⏳ Running Chronological Simulation & Monte Carlo...";
+
+    try {
+      const res = await api("/api/paper/backtest", "POST", { strategy });
+      if (!res.success) {
+        alert("Backtest failed: " + res.message);
+        return;
+      }
+
+      const results = res.results || {};
+      const wf = results.walk_forward || {};
+      const mc = results.monte_carlo || {};
+
+      $("backtestResultsArea").style.display = "block";
+
+      // Train Set
+      const train = wf.train || {};
+      $("trainTrades").textContent = train.trades_count || 0;
+      $("trainWinRate").textContent = `${(train.win_rate || 0).toFixed(1)}%`;
+      $("trainPf").textContent = train.profit_factor || "—";
+      $("trainNetPnl").textContent = fmtSignedMoney(train.net_pnl || 0);
+      $("trainMaxDd").textContent = `${(train.max_drawdown_pct || 0).toFixed(2)}%`;
+
+      // Validation Set
+      const val = wf.validation || {};
+      $("valTrades").textContent = val.trades_count || 0;
+      $("valWinRate").textContent = `${(val.win_rate || 0).toFixed(1)}%`;
+      $("valPf").textContent = val.profit_factor || "—";
+      $("valNetPnl").textContent = fmtSignedMoney(val.net_pnl || 0);
+      $("valMaxDd").textContent = `${(val.max_drawdown_pct || 0).toFixed(2)}%`;
+
+      // Out-of-Sample Test Set
+      const test = wf.test || {};
+      $("testTrades").textContent = test.trades_count || 0;
+      $("testWinRate").textContent = `${(test.win_rate || 0).toFixed(1)}%`;
+      $("testPf").textContent = test.profit_factor || "—";
+      $("testNetPnl").textContent = fmtSignedMoney(test.net_pnl || 0);
+      $("testMaxDd").textContent = `${(test.max_drawdown_pct || 0).toFixed(2)}%`;
+
+      // Monte Carlo
+      $("mcMaxDdP95").textContent = `${(mc.p95_max_drawdown_pct || 0).toFixed(2)}%`;
+      $("mcMaxDdMedian").textContent = `${(mc.median_max_drawdown_pct || 0).toFixed(2)}%`;
+      $("mcRuinProb").textContent = `${(mc.ruin_probability || 0).toFixed(2)}%`;
+      $("mcMedianEquity").textContent = fmtMoney(mc.median_final_equity || 10000);
+    } catch (e) {
+      alert("Error executing backtest: " + e.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "⚡ Run Walk-Forward Validation (60/20/20)";
+    }
+  }
+
+  // --- FORENSIC TRADE REPLAY MODAL ---
+  async function openTradeReplayModal(posId) {
+    activeReplayPosId = posId;
+    $("modalTradeReplay").style.display = "flex";
+    $("replayTimelineBody").innerHTML = '<tr><td colspan="3" class="empty-state">Loading reconstruction data...</td></tr>';
+
+    try {
+      const data = await api(`/api/paper/trade_replay/${posId}`, "GET");
+      const pos = data.position || {};
+      const metrics = data.metrics || {};
+      const timeline = data.timeline || [];
+
+      $("replayPosId").textContent = pos.id ? `${pos.id.slice(0, 8)}…` : "—";
+      $("replaySetupId").textContent = pos.setup_id || "—";
+      $("replayDir").textContent = pos.direction || "—";
+      $("replayDir").className = pos.direction === "LONG" ? "text-bull" : "text-bear";
+      $("replayEntry").textContent = fmtMoney(pos.entry_price);
+      $("replayExit").textContent = pos.exit_price ? fmtMoney(pos.exit_price) : "Open";
+      $("replayNetPnl").textContent = pos.net_pnl != null ? fmtSignedMoney(pos.net_pnl) : fmtSignedMoney(pos.unrealized_pnl);
+
+      const mfe = Number(metrics.mfe || 0);
+      const mae = Number(metrics.mae || 0);
+      $("replayMfe").textContent = fmtSignedMoney(mfe);
+      $("replayMae").textContent = fmtSignedMoney(mae);
+      $("replayBeStatus").textContent = metrics.breakeven_triggered ? "TRIGGERED (+1R)" : "NOT TRIGGERED";
+      $("replayBeStatus").className = "exc-val " + (metrics.breakeven_triggered ? "text-bull" : "");
+
+      const sec = Math.round(metrics.holding_period_seconds || 0);
+      const mins = Math.floor(sec / 60);
+      $("replayDuration").textContent = `${mins}m ${sec % 60}s`;
+
+      const tbody = $("replayTimelineBody");
+      tbody.innerHTML = "";
+      if (timeline.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="3" class="empty-state">No execution logs found for this position.</td></tr>';
+      } else {
+        timeline.forEach((ev) => {
+          const tr = document.createElement("tr");
+          let dStr = typeof ev.detail === "object" ? JSON.stringify(ev.detail) : String(ev.detail || "");
+          tr.innerHTML = `
+            <td>${fmtTime(ev.ts)}</td>
+            <td><strong class="mono-code">${ev.kind}</strong></td>
+            <td>${dStr}</td>
+          `;
+          tbody.appendChild(tr);
+        });
+      }
+    } catch (e) {
+      alert("Failed to load trade forensics: " + e.message);
+      $("modalTradeReplay").style.display = "none";
+    }
+  }
+
+  // --- MONOTONIC STOP LOSS ADJUSTMENT SUBMISSION ---
+  async function submitMonotonicStop() {
+    if (!activeUpdateStopPosId) return;
+    const newVal = parseFloat($("stopNewVal").value);
+    const errBox = $("stopErrorText");
+    errBox.style.display = "none";
+
+    if (isNaN(newVal) || newVal <= 0) {
+      errBox.textContent = "Please enter a valid positive stop price.";
+      errBox.style.display = "block";
+      return;
+    }
+
+    try {
+      const res = await api(`/api/paper/positions/${activeUpdateStopPosId}/update_stop`, "POST", { new_stop: newVal });
+      if (!res.success) {
+        errBox.textContent = `Monotonic Stop Violation: ${res.message || "Cannot widen stop loss"}`;
+        errBox.style.display = "block";
+      } else {
+        $("modalUpdateStop").style.display = "none";
+        await refresh(false);
+      }
+    } catch (e) {
+      errBox.textContent = "Error: " + e.message;
+      errBox.style.display = "block";
+    }
+  }
+
+  // --- REFRESH & TICK LOOP ---
   async function refresh(runTick = true) {
     if (isPolling) return;
     isPolling = true;
@@ -470,7 +814,6 @@
   }
 
   // --- EVENT HANDLERS ---
-
   $("btnStart").onclick = () => sendControl("start");
   $("btnPause").onclick = () => sendControl("pause");
   $("btnResume").onclick = () => sendControl("resume");
@@ -569,40 +912,76 @@
     }
   };
 
-  // Tabs
-  $("tabBtnTrades").onclick = () => {
-    activeTab = "trades";
-    $("tabBtnTrades").className = "tab-btn active";
-    $("tabBtnOrders").className = "tab-btn";
-    $("viewTrades").style.display = "block";
-    $("viewOrders").style.display = "none";
-    if (paperState) renderTrades(paperState.trades);
+  // Trade Replay Modal Controls
+  $("btnCloseReplayModal").onclick = () => {
+    $("modalTradeReplay").style.display = "none";
+  };
+  $("btnCloseReplayBtn").onclick = () => {
+    $("modalTradeReplay").style.display = "none";
   };
 
-  $("tabBtnOrders").onclick = () => {
-    activeTab = "orders";
-    $("tabBtnTrades").className = "tab-btn";
-    $("tabBtnOrders").className = "tab-btn active";
-    $("viewTrades").style.display = "none";
-    $("viewOrders").style.display = "block";
-    if (paperState) renderOrders(paperState.orders);
+  // Monotonic Stop Modal Controls
+  $("btnCloseStopModal").onclick = () => {
+    $("modalUpdateStop").style.display = "none";
   };
+  $("btnCancelStopModal").onclick = () => {
+    $("modalUpdateStop").style.display = "none";
+  };
+  $("btnSubmitStopUpdate").onclick = submitMonotonicStop;
+
+  // Rejection Inspector Controls
+  $("btnRefreshRejections").onclick = loadRejections;
+  $("filterRejModel").onchange = loadRejections;
+  $("filterRejStage").onchange = loadRejections;
+
+  // Backtest Controls
+  $("btnRunBacktest").onclick = runBacktest;
+
+  // Tabs Switcher (5 Tabs)
+  const tabMap = {
+    trades: { btn: "tabBtnTrades", view: "viewTrades" },
+    orders: { btn: "tabBtnOrders", view: "viewOrders" },
+    rejections: { btn: "tabBtnRejections", view: "viewRejections" },
+    backtest: { btn: "tabBtnBacktest", view: "viewBacktest" },
+    events: { btn: "tabBtnEvents", view: "viewEvents" },
+  };
+
+  Object.entries(tabMap).forEach(([tabName, els]) => {
+    const btn = $(els.btn);
+    if (!btn) return;
+    btn.onclick = () => {
+      activeTab = tabName;
+      Object.entries(tabMap).forEach(([name, target]) => {
+        const isTarget = name === tabName;
+        const b = $(target.btn);
+        const v = $(target.view);
+        if (b) b.className = isTarget ? "tab-btn active" : "tab-btn";
+        if (v) v.style.display = isTarget ? "block" : "none";
+      });
+
+      // Filter controls visibility
+      const flt = $("tradesFilterControls");
+      if (flt) flt.style.display = (tabName === "trades" || tabName === "orders") ? "flex" : "none";
+
+      if (tabName === "trades" && paperState) renderTrades(paperState.trades);
+      if (tabName === "orders" && paperState) renderOrders(paperState.orders);
+      if (tabName === "events" && paperState) renderEvents(paperState.events);
+      if (tabName === "rejections") loadRejections();
+    };
+  });
 
   // Filters
   $("filterSearch").oninput = () => {
     if (activeTab === "trades") renderTrades(paperState ? paperState.trades : []);
-    else renderOrders(paperState ? paperState.orders : []);
+    else if (activeTab === "orders") renderOrders(paperState ? paperState.orders : []);
   };
   $("filterDirection").onchange = () => {
     if (activeTab === "trades") renderTrades(paperState ? paperState.trades : []);
-    else renderOrders(paperState ? paperState.orders : []);
+    else if (activeTab === "orders") renderOrders(paperState ? paperState.orders : []);
   };
 
-  $("btnClearAuditFilter").onclick = () => {
-    if (paperState) renderEvents(paperState.events);
-  };
-
-  // Initial load & 4-second poll loop
+  // Init
+  initTheme();
   refresh(true);
   setInterval(() => refresh(true), 4000);
 })();

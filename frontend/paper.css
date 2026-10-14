@@ -3,15 +3,51 @@
    Isolated institutional dark layout
    ========================================================================== */
 
-.paper-body {
+html.paper-html,
+html:has(body.paper-body) {
+  height: auto !important;
+  min-height: 100% !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+}
+
+body.paper-body {
   background-color: var(--bg-dark);
   color: var(--text-main);
   font-family: var(--font-family);
   margin: 0;
   padding: 0;
-  min-height: 100vh;
+  min-height: 100vh !important;
+  height: auto !important;
+  max-height: none !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
   display: flex;
   flex-direction: column;
+  user-select: text;
+}
+
+/* Custom Institutional Scrollbar for Paper Trading */
+html.paper-html::-webkit-scrollbar,
+body.paper-body::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+
+html.paper-html::-webkit-scrollbar-track,
+body.paper-body::-webkit-scrollbar-track {
+  background: var(--bg-dark);
+}
+
+html.paper-html::-webkit-scrollbar-thumb,
+body.paper-body::-webkit-scrollbar-thumb {
+  background: var(--border-light);
+  border-radius: 4px;
+}
+
+html.paper-html::-webkit-scrollbar-thumb:hover,
+body.paper-body::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
 }
 
 /* 1. HEADER */

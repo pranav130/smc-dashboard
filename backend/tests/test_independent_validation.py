@@ -340,3 +340,67 @@ def test_stop_loss_widening_is_prohibited(tmp_path, monkeypatch):
     ratchet_res = pt.update_stop_loss(pos_id, 4095.0)
     assert ratchet_res["success"] is True
     assert ratchet_res["new_stop"] == 4095.0
+
+
+def test_execution_breach_detection_and_lockout(tmp_path, monkeypatch):
+    """
+    Verify that if a trade experiences an extreme loss beyond the planned risk budget
+    (e.g., due to catastrophic gap or extreme slippage), the engine logs a RISK_BUDGET_BREACH event,
+    enters PAUSED state, rejects new entries, and requires explicit operator reset.
+    """
+    db_file = str(tmp_path / "test_breach.sqlite3")
+    monkeypatch.setattr(pt, "DB_PATH", db_file)
+    pt._conn().close()
+    pt.control("start")
+    now = int(time.time())
+
+    # Open a long position
+    setup = {
+        "id": "setup-breach-test-01",
+        "state": "ACTIVE",
+        "direction": "bullish",
+        "price": 4100.0,
+        "invalidation_price": 4090.0,
+        "target_price": 4130.0,
+        "top": 4105.0,
+        "bottom": 4095.0,
+    }
+    res = pt.evaluate(setup, 4100.0, now, False)
+    assert res["accepted"] is True
+    pos_id = res["position_id"]
+
+    # Simulate catastrophic price gap: market drops to $4000.00 ($100 drop, 10x the stop distance)
+    with pt._database() as c:
+        row = dict(c.execute("SELECT * FROM paper_positions WHERE id=?", (pos_id,)).fetchone())
+        cfg = {k: pt._meta(c, k) for k in pt.DEFAULT_CONFIG}
+        pt._execute_close(c, row, 4000.0, "CATASTROPHIC_GAP_STOP", cfg)
+        c.commit()
+
+    # Verify breach event logged
+    events = pt.status()["events"]
+    breach_events = [e for e in events if e.get("kind") == "RISK_BUDGET_BREACH"]
+    assert len(breach_events) >= 1
+
+    # Verify engine state is PAUSED
+    assert pt.status()["engine_state"] == "PAUSED"
+
+    # Verify new orders are blocked
+    next_setup = {
+        "id": "setup-breach-test-02",
+        "state": "ACTIVE",
+        "direction": "bullish",
+        "price": 4000.0,
+        "invalidation_price": 3990.0,
+        "target_price": 4030.0,
+        "top": 4005.0,
+        "bottom": 3995.0,
+    }
+    next_res = pt.evaluate(next_setup, 4000.0, now, False)
+    assert next_res["accepted"] is False
+    assert next_res["reason"] == "ENGINE_PAUSED"
+
+    # Operator review and reset
+    reset_res = pt.control("reset-breach")
+    assert reset_res["success"] is True
+    assert pt.status()["engine_state"] == "STOPPED"
+

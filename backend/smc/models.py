@@ -110,6 +110,10 @@ class BreakOfStructure(BaseModel):
     valid: bool
     timeframe: str
 
+    @property
+    def direction(self) -> str:
+        return self.type
+
 
 class TrendState(BaseModel):
     """Current structural trend as of the last confirmed swing."""

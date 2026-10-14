@@ -103,6 +103,12 @@ MIN_REWARD_TO_RISK = 2.0            # Minimum 2:1 net reward-to-risk
 CONSECUTIVE_LOSS_PAUSE_COUNT = 3    # Pause after 3 consecutive losses
 CONSECUTIVE_LOSS_COOLDOWN_SECS = 14400 # 4 hours mandatory cooling off
 
+# STRATEGY FREEZE METADATA (Pre-Declared Forward Testing Protocol)
+STRATEGY_VERSION = "2.1.0-FROZEN-20261014"
+FORWARD_TEST_START_UTC = "2026-10-14T14:15:00Z"
+FORWARD_TEST_DURATION_DAYS = 30
+FORWARD_TEST_MIN_TRADES = 50
+
 def validate_environment():
     """Validate critical environment configurations and report diagnostics."""
     if EXECUTION_MODE != "PAPER":

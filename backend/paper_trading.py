@@ -372,6 +372,13 @@ def control(action: str, payload: Optional[Dict[str, Any]] = None) -> Dict[str, 
             _set_meta(c, "engine_state", "STOPPED")
             _log_event(c, "STOP_RESET", detail={"note": "Emergency stop cleared. Engine remains STOPPED until manually started."})
 
+        elif action in ("reset-breach", "reset_breach"):
+            global_risk_manager.reset_circuit_breaker()
+            _set_meta(c, "engine_state", "STOPPED")
+            _log_event(c, "BREACH_RESET", detail={"operator_reset": True, "note": "Execution breach cleared. Engine in STOPPED state."})
+            c.commit()
+            return {"success": True, "message": "Execution breach reset successfully. Engine remains in STOPPED state.", "status": status()}
+
         elif action == "close-all":
             last_price = float(_meta(c, "last_price") or 0.0)
             if last_price <= 0:

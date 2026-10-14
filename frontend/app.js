@@ -358,26 +358,35 @@ function renderActiveSetupCard(analysis) {
   const tState = analysis.terminal_state || {};
   const setup = tState.active_setup;
 
-  // If dismissed or no qualifying setup exists: show quiet neutral state
-  if (!setup || setup.id === dismissedSetupId || tState.setup_state === "IDLE") {
+  // If dismissed, idle, or purely routine WATCH: show clean, compact surveillance strip
+  const isActionable = setup && ["READY", "WAITING FOR CONFIRMATION", "ACTIVE", "EXTREME"].includes(setup.canonical_setup_state || setup.state);
+
+  if (!setup || setup.id === dismissedSetupId || !isActionable) {
     activeSetupContainer.innerHTML = `
-      <div class="active-setup-card idle-card" id="activeSetupCard">
-        <div class="idle-message">
-          <span class="idle-indicator"></span>
-          <span>Market surveillance idle — monitoring SMC structural key levels for qualified trade setups</span>
+      <div class="active-setup-card idle-card" id="activeSetupCard" style="padding: 7px 14px; margin-bottom: 6px;">
+        <div class="idle-message" style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span class="idle-indicator" style="background: var(--teal-bull); width: 6px; height: 6px; border-radius: 50%;"></span>
+            <span style="font-size: 11px; font-weight: 500; color: var(--text-dim);">
+              Market Surveillance Active · Monitoring key levels for qualified trade setups
+            </span>
+          </div>
+          <span style="font-size: 10px; color: var(--text-muted); font-family: var(--font-mono);">
+            1D Bias: ${(analysis.daily_trend_state?.trend || 'NEUTRAL').toUpperCase()} · Execution TF: ${currentTf}
+          </span>
         </div>
       </div>
     `;
     return;
   }
 
-  const state = setup.state || "WATCH";
+  const state = setup.canonical_setup_state || setup.state || "WAITING FOR CONFIRMATION";
   const isBull = setup.direction === "bullish";
   const dirIcon = isBull ? "▲ LONG" : "▼ SHORT";
   const dirTagClass = isBull ? "bullish" : "bearish";
 
   // State-specific styles and banners
-  let cardStateClass = "card-watch";
+  let cardStateClass = "card-active";
   let stateBannerHtml = "";
 
   if (state === "EXTREME") {
@@ -388,30 +397,21 @@ function renderActiveSetupCard(analysis) {
         <span>⚡ EXTREME CONFLUENCE · Multi-Timeframe Institutional Confluence</span>
       </div>
     `;
-  } else if (state === "ACTIVE") {
+  } else if (state === "READY" || state === "ACTIVE") {
     cardStateClass = "card-active";
     stateBannerHtml = `
       <div class="state-banner active-confirmed-banner">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-        <span>✓ ACTIVE SETUP CONFIRMED · Strict Entry & Rejection Criteria Satisfied</span>
-      </div>
-    `;
-  } else if (state === "INVALIDATED") {
-    cardStateClass = "card-invalidated";
-    const invalReason = setup.reason || (setup.is_target_reached ? "Target already reached. Setup expired." : "Structural invalidation triggered");
-    stateBannerHtml = `
-      <div class="state-banner invalidated-banner">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
-        <span>✕ SETUP INVALIDATED / EXPIRED · ${invalReason}</span>
+        <span>✓ READY FOR INSPECTION · Verified Entry, SL, TP, and R:R Criteria Satisfied</span>
       </div>
     `;
   } else {
-    // WATCH is default
+    // WAITING FOR CONFIRMATION
     cardStateClass = "card-watch";
     stateBannerHtml = `
       <div class="state-banner waiting-banner">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-        <span>⏳ WAITING FOR CONFIRMATION · Pending closed-candle rejection & trigger rule</span>
+        <span>⏳ WAITING FOR CONFIRMATION · Level Reaction / Trendline Break Detected</span>
       </div>
     `;
   }
@@ -426,18 +426,36 @@ function renderActiveSetupCard(analysis) {
     targetDisplay = `${targetDisplay} (REACHED)`;
   }
 
-  // Directional Context (framing as context, not execution instruction)
-  const dirContextLabel = setup.directional_context || `${dirIcon} Bias`;
+  // Directional Context & Trade Classification
+  const dirContextLabel = setup.directional_context || `${dirIcon} Context`;
+  const tradeClass = setup.trade_classification || "NEUTRAL";
+  const tradeClassTag = tradeClass === "COUNTERTREND (HIGH RISK)"
+    ? `<span class="trade-class-tag countertrend" style="background: rgba(239, 68, 68, 0.2); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.4); padding: 1px 6px; border-radius: 3px; font-size: 9px; font-weight: 700;">COUNTERTREND (HIGH RISK)</span>`
+    : (tradeClass === "PRO-TREND" ? `<span class="trade-class-tag protrend" style="background: rgba(0, 180, 159, 0.2); color: #00b49f; border: 1px solid rgba(0, 180, 159, 0.4); padding: 1px 6px; border-radius: 3px; font-size: 9px; font-weight: 700;">PRO-TREND</span>` : "");
+
+  // 12-Point Inspector Table Rows
+  const inspectorHtml = (setup.inspector_checklist || []).map((item) => {
+    const isPass = item.status === "PASS";
+    const statusColor = isPass ? "#00b49f" : (item.status === "FAIL" ? "#ef4444" : "#94a3b8");
+    return `
+      <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+        <td style="padding: 4px 6px; font-weight: 500;">${item.title}</td>
+        <td style="padding: 4px 6px;"><span style="color: ${statusColor}; font-weight: 700; font-size: 9px; border: 1px solid ${statusColor}44; padding: 1px 4px; border-radius: 2px;">${item.status}</span></td>
+        <td style="padding: 4px 6px; color: var(--text-dim);">${item.detail}</td>
+      </tr>
+    `;
+  }).join("");
 
   activeSetupContainer.innerHTML = `
     <div class="active-setup-card ${cardStateClass}" id="activeSetupCard">
       ${stateBannerHtml}
       <div class="card-top-row">
-        <div class="card-identity">
+        <div class="card-identity" style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
           <span class="directional-context-tag ${dirTagClass}">${dirContextLabel}</span>
+          ${tradeClassTag}
           <span class="setup-title">${setup.name} (${setup.timeframe})</span>
           <span class="quality-badge">${setup.quality}</span>
-          <span class="setup-pill ${state.toLowerCase()}" style="font-size: 9px; padding: 1px 6px;">${state}</span>
+          <span class="setup-pill ${state.toLowerCase().replace(/ /g, '-')}" style="font-size: 9px; padding: 1px 6px;">${state}</span>
         </div>
         <button class="btn-dismiss" id="btnDismissCard" title="Acknowledge & dismiss setup card view (retains surveillance in background)">
           ✕ Dismiss
@@ -467,10 +485,32 @@ function renderActiveSetupCard(analysis) {
         </div>
       </div>
 
-      <div class="card-bottom-row">
+      <div class="card-bottom-row" style="display: flex; flex-direction: column; gap: 6px;">
         <div class="card-checklist-badges">${checklistsHtml}</div>
         <div class="card-reason" style="font-size: 10px; color: var(--text-dim);">
-          ${setup.reason || (state === "WATCH" ? "Awaiting price reaction & closed-candle confirmation inside POI" : "Real-time SMC trigger criteria active")}
+          ${setup.reason || (state === "WAITING FOR CONFIRMATION" ? "Awaiting price reaction & closed-candle confirmation inside POI" : "Real-time SMC trigger criteria active")}
+        </div>
+
+        <!-- Phase 5: Setup Validation Inspector -->
+        <div class="inspector-section" style="border-top: 1px solid var(--border-color); padding-top: 6px;">
+          <button class="btn-toggle-inspector" id="btnToggleInspector" style="background: rgba(255,255,255,0.03); border: 1px solid var(--border-color); color: var(--text-dim); font-size: 10px; border-radius: 4px; padding: 3px 8px; cursor: pointer; display: flex; align-items: center; gap: 4px;">
+            <span>📋 12-Point Setup Validation Inspector</span>
+            <span id="insArrow">▾</span>
+          </button>
+          <div id="inspectorContainer" style="display: none; margin-top: 6px; overflow-x: auto;">
+            <table class="inspector-table" style="width: 100%; font-size: 10px; border-collapse: collapse; text-align: left;">
+              <thead>
+                <tr style="color: var(--text-muted); border-bottom: 1px solid var(--border-color);">
+                  <th style="padding: 4px 6px;">Criteria</th>
+                  <th style="padding: 4px 6px; width: 60px;">Result</th>
+                  <th style="padding: 4px 6px;">Evidence / Verification</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${inspectorHtml}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     </div>
@@ -481,6 +521,19 @@ function renderActiveSetupCard(analysis) {
     btnDismiss.addEventListener("click", () => {
       dismissedSetupId = setup.id;
       renderActiveSetupCard(currentAnalysis);
+    });
+  }
+
+  const btnToggleInspector = document.getElementById("btnToggleInspector");
+  if (btnToggleInspector) {
+    btnToggleInspector.addEventListener("click", () => {
+      const insCont = document.getElementById("inspectorContainer");
+      const insArr = document.getElementById("insArrow");
+      if (insCont) {
+        const isClosed = insCont.style.display === "none";
+        insCont.style.display = isClosed ? "block" : "none";
+        if (insArr) insArr.textContent = isClosed ? "▴" : "▾";
+      }
     });
   }
 }
@@ -542,8 +595,10 @@ function clearOverlayLines() {
 
 // Collision-Aware Price Line Creator:
 // Prevents overlapping price axis scale badges when lines are within 1.20 USD of each other
+// Collision-Aware Price Line Creator:
+// Prevents overlapping price axis scale badges when lines are within 4.50 USD of each other
 function addCollisionAwarePriceLine(opts) {
-  const COLLISION_THRESHOLD = 1.20; // 1.20 USD minimum separation on price axis
+  const COLLISION_THRESHOLD = 4.50; // $4.50 USD minimum separation on price axis (~0.11% on Gold)
   let showAxis = opts.axisLabelVisible !== false;
   if (showAxis && opts.price !== undefined && opts.price !== null) {
     const collides = placedPriceLabels.some((p) => Math.abs(p - opts.price) < COLLISION_THRESHOLD);
@@ -565,15 +620,13 @@ function drawSMCLevels(analysis) {
   if (!analysis) return;
   placedPriceLabels = [];
 
+  const curPrice = analysis.current_price || (latestCandle ? latestCandle.close : 0);
   const setup = analysis.terminal_state?.active_setup;
 
   // -------------------------------------------------------------------------
   // Priority 1: Focus Setup Mode POI, Target & Invalidation (Highest Priority)
   // -------------------------------------------------------------------------
-  if (focusSetupMode && setup && setup.state !== "IDLE") {
-    const isBull = setup.direction === "bullish";
-    const setupColor = isBull ? "#00b49f" : "#f97316";
-
+  if (focusSetupMode && setup && ["READY", "WAITING FOR CONFIRMATION", "ACTIVE", "EXTREME"].includes(setup.canonical_setup_state || setup.state)) {
     // Setup Target (TP)
     if (setup.target_price) {
       addCollisionAwarePriceLine({
@@ -582,7 +635,7 @@ function drawSMCLevels(analysis) {
         lineWidth: 2,
         lineStyle: LightweightCharts.LineStyle.Dashed,
         axisLabelVisible: true,
-        title: `★ FOCUS TARGET (TP): $${setup.target_price.toFixed(2)}`,
+        title: `★ TARGET (TP): $${setup.target_price.toFixed(2)}`,
       });
     }
 
@@ -594,208 +647,105 @@ function drawSMCLevels(analysis) {
         lineWidth: 2,
         lineStyle: LightweightCharts.LineStyle.Dashed,
         axisLabelVisible: true,
-        title: `★ FOCUS INVALIDATION (SL): $${setup.invalidation_price.toFixed(2)}`,
+        title: `★ STOP LOSS (SL): $${setup.invalidation_price.toFixed(2)}`,
       });
     }
   }
 
   // -------------------------------------------------------------------------
-  // 1. Liquidity Levels (PDH, PDL, PWH, PWL)
+  // 1. Liquidity Levels (Only Active Unswept PDH, PDL, PWH, PWL)
   // -------------------------------------------------------------------------
   if (layerToggles.liquidity) {
-    const liqs = analysis.liquidity_levels || [];
-    liqs.forEach((l) => {
-      const isFaded = focusSetupMode;
-      if (l.type === "PDH" || l.type === "PDL") {
-        addCollisionAwarePriceLine({
-          price: l.price,
-          color: isFaded ? "rgba(41, 182, 246, 0.4)" : (l.type === "PDH" ? "#29b6f6" : "#0288d1"),
-          lineWidth: 1,
-          lineStyle: LightweightCharts.LineStyle.Dashed,
-          axisLabelVisible: !isFaded,
-          title: `${l.type} ($${l.price.toFixed(2)}) [${l.swept ? "SWEPT" : "ACTIVE"}]`,
-        });
-      } else if (l.type === "PWH" || l.type === "PWL") {
-        addCollisionAwarePriceLine({
-          price: l.price,
-          color: isFaded ? "rgba(38, 198, 218, 0.3)" : "#26c6da",
-          lineWidth: 1,
-          lineStyle: LightweightCharts.LineStyle.Dotted,
-          axisLabelVisible: !isFaded,
-          title: `${l.type} ($${l.price.toFixed(2)})`,
-        });
-      }
+    const liqs = (analysis.liquidity_levels || []).filter((l) => !l.swept);
+    liqs.slice(0, 4).forEach((l) => {
+      const isPD = l.type === "PDH" || l.type === "PDL";
+      addCollisionAwarePriceLine({
+        price: l.price,
+        color: isPD ? (l.type === "PDH" ? "#29b6f6" : "#0288d1") : "#26c6da",
+        lineWidth: 1,
+        lineStyle: isPD ? LightweightCharts.LineStyle.Dashed : LightweightCharts.LineStyle.Dotted,
+        axisLabelVisible: true,
+        title: `${l.type} ($${l.price.toFixed(2)})`,
+      });
     });
   }
 
   // -------------------------------------------------------------------------
-  // 2. Higher Timeframe FVGs (1D & 4H)
+  // 2. Higher Timeframe FVGs (1D & 4H) - Strictly Top 2 Above and Top 2 Below
   // -------------------------------------------------------------------------
   if (layerToggles.htfFvg) {
-    const htfFvgs = [...(analysis.daily_fvgs || []), ...(analysis.h4_fvgs || [])];
-    htfFvgs.forEach((f) => {
-      if (!f.mitigated && !f.inverted) {
-        const isBullish = f.direction === "bullish";
-        const isFocusPOI = focusSetupMode && setup && Math.abs(setup.distance) < 50 && f.timeframe === setup.timeframe;
-        
-        let fvgColor = isBullish ? "#00b49f" : "#f97316";
-        let boundColor = isBullish ? "rgba(0, 180, 159, 0.45)" : "rgba(249, 115, 22, 0.45)";
-        let lineWidth = isFocusPOI ? 3 : 2;
+    const htfFvgs = [...(analysis.daily_fvgs || []), ...(analysis.h4_fvgs || [])]
+      .filter((f) => !f.mitigated && !f.inverted);
 
-        if (focusSetupMode && !isFocusPOI) {
-          fvgColor = isBullish ? "rgba(0, 180, 159, 0.25)" : "rgba(249, 115, 22, 0.25)";
-          boundColor = "rgba(100, 116, 139, 0.15)";
-          lineWidth = 1;
-        }
+    const fvgsAbove = htfFvgs.filter((f) => f.midpoint > curPrice).sort((a, b) => a.midpoint - b.midpoint).slice(0, 2);
+    const fvgsBelow = htfFvgs.filter((f) => f.midpoint <= curPrice).sort((a, b) => b.midpoint - a.midpoint).slice(0, 2);
+    const renderFvgs = [...fvgsAbove, ...fvgsBelow];
 
-        const dirLabel = isBullish ? "Bullish" : "Bearish";
-        const prefix = isFocusPOI ? "★ FOCUS POI: " : "";
+    renderFvgs.forEach((f) => {
+      const isBullish = f.direction === "bullish";
+      const fvgColor = isBullish ? "#00b49f" : "#f97316";
+      const dirLabel = isBullish ? "Bullish" : "Bearish";
 
-        // 50% Midpoint POI line
-        addCollisionAwarePriceLine({
-          price: f.midpoint,
-          color: fvgColor,
-          lineWidth: lineWidth,
-          lineStyle: isFocusPOI ? LightweightCharts.LineStyle.Solid : LightweightCharts.LineStyle.SparseDotted,
-          axisLabelVisible: !focusSetupMode || isFocusPOI,
-          title: `${prefix}${f.timeframe} ${dirLabel} FVG 50% ($${f.bottom.toFixed(2)} - $${f.top.toFixed(2)})`,
-        });
-
-        // Boundary lines
-        addCollisionAwarePriceLine({
-          price: f.top,
-          color: boundColor,
-          lineWidth: 1,
-          lineStyle: LightweightCharts.LineStyle.Dotted,
-          axisLabelVisible: false,
-          title: `${f.timeframe} Top: $${f.top.toFixed(2)}`,
-        });
-        addCollisionAwarePriceLine({
-          price: f.bottom,
-          color: boundColor,
-          lineWidth: 1,
-          lineStyle: LightweightCharts.LineStyle.Dotted,
-          axisLabelVisible: false,
-          title: `${f.timeframe} Bot: $${f.bottom.toFixed(2)}`,
-        });
-      }
+      // Draw single 50% Midpoint POI line per FVG to prevent chart label stacking
+      addCollisionAwarePriceLine({
+        price: f.midpoint,
+        color: fvgColor,
+        lineWidth: 1,
+        lineStyle: LightweightCharts.LineStyle.SparseDotted,
+        axisLabelVisible: true,
+        title: `${f.timeframe} ${dirLabel} FVG 50% ($${f.bottom.toFixed(2)} - $${f.top.toFixed(2)})`,
+      });
     });
   }
 
   // -------------------------------------------------------------------------
-  // 3. Current Timeframe FVGs (Controlled by Current TF FVGs toggle)
+  // 3. Current Timeframe FVGs (Only 1 nearest above and 1 nearest below)
   // -------------------------------------------------------------------------
-  if (layerToggles.ltfFvg) {
-    if (currentTf === "1H") {
-      // 1H FVGs ONLY appear on 1H timeframe: Lighter mint / peach tint
-      const h1List = analysis.timeframe_fvgs || analysis.h1_fvgs || [];
-      h1List.slice(-4).forEach((f) => {
-        if (!f.mitigated && !f.inverted) {
-          const isBullish = f.direction === "bullish";
-          let fvgColor = isBullish ? "#5eead4" : "#fdba74";
-          let boundColor = isBullish ? "rgba(94, 234, 212, 0.35)" : "rgba(253, 186, 116, 0.35)";
-
-          if (focusSetupMode) {
-            fvgColor = isBullish ? "rgba(94, 234, 212, 0.2)" : "rgba(253, 186, 116, 0.2)";
-            boundColor = "rgba(100, 116, 139, 0.12)";
-          }
-
-          const dirLabel = isBullish ? "Bullish" : "Bearish";
-
-          addCollisionAwarePriceLine({
-            price: f.midpoint,
-            color: fvgColor,
-            lineWidth: 1,
-            lineStyle: LightweightCharts.LineStyle.Dotted,
-            axisLabelVisible: !focusSetupMode,
-            title: `1H ${dirLabel} FVG 50% ($${f.bottom.toFixed(2)} - $${f.top.toFixed(2)})`,
-          });
-
-          addCollisionAwarePriceLine({
-            price: f.top,
-            color: boundColor,
-            lineWidth: 1,
-            lineStyle: LightweightCharts.LineStyle.Dotted,
-            axisLabelVisible: false,
-          });
-          addCollisionAwarePriceLine({
-            price: f.bottom,
-            color: boundColor,
-            lineWidth: 1,
-            lineStyle: LightweightCharts.LineStyle.Dotted,
-            axisLabelVisible: false,
-          });
-        }
+  if (layerToggles.ltfFvg && (currentTf === "1H" || currentTf === "30M")) {
+    const ltfList = (analysis.timeframe_fvgs || []).filter((f) => !f.mitigated && !f.inverted);
+    const ltfAbove = ltfList.filter((f) => f.midpoint > curPrice).sort((a, b) => a.midpoint - b.midpoint).slice(0, 1);
+    const ltfBelow = ltfList.filter((f) => f.midpoint <= curPrice).sort((a, b) => b.midpoint - a.midpoint).slice(0, 1);
+    [...ltfAbove, ...ltfBelow].forEach((f) => {
+      const isBullish = f.direction === "bullish";
+      addCollisionAwarePriceLine({
+        price: f.midpoint,
+        color: isBullish ? "#5eead4" : "#fdba74",
+        lineWidth: 1,
+        lineStyle: LightweightCharts.LineStyle.Dotted,
+        axisLabelVisible: true,
+        title: `${f.timeframe} ${isBullish ? 'Bull' : 'Bear'} FVG 50% ($${f.bottom.toFixed(2)} - $${f.top.toFixed(2)})`,
       });
-    } else if (currentTf !== "1D" && currentTf !== "4H") {
-      // Sub-Hourly Timeframes (30M, 15M, 5M, 1M): Only render that timeframe's own FVGs (never 1H FVGs)
-      (analysis.timeframe_fvgs || []).slice(-4).forEach((f) => {
-        if (!f.mitigated && !f.inverted) {
-          const isBullish = f.direction === "bullish";
-          let fvgColor = isBullish ? "#29b6f6" : "#e91e63";
-          let boundColor = isBullish ? "rgba(41, 182, 246, 0.35)" : "rgba(233, 30, 99, 0.35)";
-
-          if (focusSetupMode) {
-            fvgColor = isBullish ? "rgba(41, 182, 246, 0.2)" : "rgba(233, 30, 99, 0.2)";
-            boundColor = "rgba(100, 116, 139, 0.12)";
-          }
-
-          const dirLabel = isBullish ? "Bullish" : "Bearish";
-
-          addCollisionAwarePriceLine({
-            price: f.midpoint,
-            color: fvgColor,
-            lineWidth: 1,
-            lineStyle: LightweightCharts.LineStyle.Dotted,
-            axisLabelVisible: !focusSetupMode,
-            title: `${f.timeframe} ${dirLabel} FVG 50% ($${f.bottom.toFixed(2)} - $${f.top.toFixed(2)})`,
-          });
-
-          addCollisionAwarePriceLine({
-            price: f.top,
-            color: boundColor,
-            lineWidth: 1,
-            lineStyle: LightweightCharts.LineStyle.Dotted,
-            axisLabelVisible: false,
-          });
-          addCollisionAwarePriceLine({
-            price: f.bottom,
-            color: boundColor,
-            lineWidth: 1,
-            lineStyle: LightweightCharts.LineStyle.Dotted,
-            axisLabelVisible: false,
-          });
-        }
-      });
-    }
+    });
   }
 
   // -------------------------------------------------------------------------
-  // 4. Order Blocks
+  // 4. Order Blocks (Nearest 1 bullish and 1 bearish)
   // -------------------------------------------------------------------------
   if (layerToggles.orderBlocks) {
-    const obs = analysis.order_blocks || [];
-    obs.slice(-4).forEach((ob) => {
-      if (!ob.mitigated) {
-        const isFaded = focusSetupMode;
-        addCollisionAwarePriceLine({
-          price: ob.midpoint,
-          color: isFaded ? "rgba(38, 166, 154, 0.25)" : (ob.direction === "bullish" ? "#26a69a" : "#ab47bc"),
-          lineWidth: 1,
-          lineStyle: LightweightCharts.LineStyle.Dashed,
-          axisLabelVisible: !isFaded,
-          title: `${ob.timeframe} ${ob.direction.toUpperCase()} OB 50% ($${ob.bottom.toFixed(2)} - $${ob.top.toFixed(2)})`,
-        });
-      }
+    const obs = (analysis.order_blocks || []).filter((ob) => !ob.mitigated);
+    const obBull = obs.filter((o) => o.direction === "bullish").slice(-1);
+    const obBear = obs.filter((o) => o.direction === "bearish").slice(-1);
+    [...obBull, ...obBear].forEach((ob) => {
+      addCollisionAwarePriceLine({
+        price: ob.midpoint,
+        color: ob.direction === "bullish" ? "#26a69a" : "#ab47bc",
+        lineWidth: 1,
+        lineStyle: LightweightCharts.LineStyle.Dashed,
+        axisLabelVisible: true,
+        title: `${ob.timeframe} ${ob.direction.toUpperCase()} OB ($${ob.bottom.toFixed(2)} - $${ob.top.toFixed(2)})`,
+      });
     });
   }
 
   // -------------------------------------------------------------------------
-  // 5. Psychological 20s and 80s Levels
+  // 5. Psychological 20s and 80s Levels (At most 1 nearest level, if enabled)
   // -------------------------------------------------------------------------
   if (layerToggles.psych && !focusSetupMode) {
-    const psychs = analysis.psychological_levels || [];
-    psychs.slice(0, 3).forEach((p) => {
+    const psychs = (analysis.psychological_levels || [])
+      .slice()
+      .sort((a, b) => Math.abs(a.price - curPrice) - Math.abs(b.price - curPrice))
+      .slice(0, 1);
+    psychs.forEach((p) => {
       addCollisionAwarePriceLine({
         price: p.price,
         color: "#d97706",
@@ -808,11 +758,13 @@ function drawSMCLevels(analysis) {
   }
 
   // -------------------------------------------------------------------------
-  // 6. Trendlines
+  // 6. Trendlines (At most 2 deduplicated lines: 1 resistance, 1 support)
   // -------------------------------------------------------------------------
   if (layerToggles.trendlines && !focusSetupMode) {
     const tls = analysis.trendlines || [];
-    tls.forEach((tl) => {
+    const resTl = tls.filter((t) => t.direction === "resistance").slice(0, 1);
+    const supTl = tls.filter((t) => t.direction === "support").slice(0, 1);
+    [...resTl, ...supTl].forEach((tl) => {
       if (tl.current_projected_price) {
         addCollisionAwarePriceLine({
           price: tl.current_projected_price,
@@ -827,63 +779,24 @@ function drawSMCLevels(analysis) {
   }
 
   // -------------------------------------------------------------------------
-  // 7. Hidden Liquidity Intelligence Zones (BSL / SSL / Heatmap Overlay)
+  // 7. Hidden Liquidity Zones (If enabled, at most 2 nearest high-conviction)
   // -------------------------------------------------------------------------
-  if (layerToggles.hiddenLiquidity) {
-    const liqIntel = analysis.liquidity_intelligence;
-    const zones = liqIntel?.zones || [];
+  if (layerToggles.hiddenLiquidity && !focusSetupMode) {
+    const zones = (analysis.liquidity_intelligence?.zones || [])
+      .filter((z) => z.status !== "INVALIDATED" && z.score >= 75)
+      .slice(0, 2);
 
-    // Filter to active / approached / swept zones (exclude invalidated unless focused)
-    const renderZones = zones.filter((z) => z.status !== "INVALIDATED").slice(0, 8);
-
-    renderZones.forEach((z) => {
+    zones.forEach((z) => {
       const isBsl = z.type.includes("BSL");
-      const isSwept = z.status === "SWEPT";
-      const isApproached = z.status === "APPROACHED";
-
-      // Color scheme: BSL teal/cyan, SSL orange, Swept subdued grey
-      let baseColor;
-      if (isSwept) {
-        baseColor = "rgba(100, 116, 139, 0.4)";
-      } else if (isBsl) {
-        baseColor = z.score >= 75 ? "#00b4af" : "#2dd4bf";
-      } else {
-        baseColor = z.score >= 75 ? "#f97316" : "#fb923c";
-      }
-
-      // If Focus Setup Mode is ON and this isn't the primary target, fade slightly
-      if (focusSetupMode) {
-        baseColor = isBsl ? "rgba(0, 180, 175, 0.3)" : "rgba(249, 115, 22, 0.3)";
-      }
-
-      // Draw Center / Anchor Line
+      const baseColor = isBsl ? "#00b4af" : "#f97316";
       addCollisionAwarePriceLine({
         price: z.price,
         color: baseColor,
-        lineWidth: z.score >= 75 ? 2 : 1,
-        lineStyle: isSwept ? LightweightCharts.LineStyle.Dotted : LightweightCharts.LineStyle.Solid,
-        axisLabelVisible: !focusSetupMode && z.score >= 60,
-        title: `💧 ${z.type} [${z.score}/100] ($${z.bottom.toFixed(2)} - $${z.top.toFixed(2)})`,
+        lineWidth: 1,
+        lineStyle: LightweightCharts.LineStyle.Solid,
+        axisLabelVisible: true,
+        title: `💧 ${z.type} [${z.score}] ($${z.bottom.toFixed(2)} - $${z.top.toFixed(2)})`,
       });
-
-      // Translucent boundary line
-      const boundColor = isBsl ? "rgba(0, 180, 175, 0.15)" : "rgba(249, 115, 22, 0.15)";
-      if (!focusSetupMode && z.score >= 65) {
-        addCollisionAwarePriceLine({
-          price: z.top,
-          color: boundColor,
-          lineWidth: 1,
-          lineStyle: LightweightCharts.LineStyle.SparseDotted,
-          axisLabelVisible: false,
-        });
-        addCollisionAwarePriceLine({
-          price: z.bottom,
-          color: boundColor,
-          lineWidth: 1,
-          lineStyle: LightweightCharts.LineStyle.SparseDotted,
-          axisLabelVisible: false,
-        });
-      }
     });
   }
 }
@@ -891,8 +804,8 @@ function drawSMCLevels(analysis) {
 function drawChartMarkers(analysis) {
   const markers = [];
 
-  // Swing markers
-  (analysis.swings || []).slice(-8).forEach((s) => {
+  // Essential Swing markers: at most 4 most recent confirmed swings
+  (analysis.swings || []).slice(-4).forEach((s) => {
     markers.push({
       time: toLocalChartTime(s.time),
       position: s.type === "high" ? "aboveBar" : "belowBar",
@@ -902,15 +815,20 @@ function drawChartMarkers(analysis) {
     });
   });
 
-  // Structure breaks (BoS / CHoCH)
-  (analysis.bos_signals || []).slice(-4).forEach((b) => {
-    markers.push({
-      time: toLocalChartTime(b.time),
-      position: b.type === "bullish" ? "aboveBar" : "belowBar",
-      color: b.kind === "CHoCH" ? "#d97706" : "#0284c7",
-      shape: "circle",
-      text: `${b.kind} (${b.retracement_pct}%)`,
-    });
+  // Structure breaks (BoS / CHoCH): at most 2 most recent, strictly deduplicated by timestamp
+  const seenTimes = new Set();
+  (analysis.bos_signals || []).slice(-3).forEach((b) => {
+    const localT = toLocalChartTime(b.time);
+    if (!seenTimes.has(localT)) {
+      seenTimes.add(localT);
+      markers.push({
+        time: localT,
+        position: b.type === "bullish" ? "aboveBar" : "belowBar",
+        color: b.kind === "CHoCH" ? "#d97706" : "#0284c7",
+        shape: "circle",
+        text: `${b.kind} (${b.retracement_pct}%)`,
+      });
+    }
   });
 
   markers.sort((a, b) => a.time - b.time);

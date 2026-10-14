@@ -336,6 +336,7 @@ def evaluate_model_a(
         quality="Institutional" if htf_confluence and displacement_confirmed else "Standard",
         directional_context=f"Post-{selected_sweep.label} Sweep Retracement",
         confirmation_status="Close Confirmed" if (displacement_confirmed or bos_confirmed) else "Pending",
+        canonical_setup_state="READY" if signal_state == "ACTIVE" else ("WAITING FOR CONFIRMATION" if signal_state == "WATCH" else "IDLE"),
         checklist=checklist,
         opposing_warning=None,
         last_event_ist=selected_sweep.sweep_ist or "N/A"

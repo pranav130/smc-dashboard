@@ -330,21 +330,31 @@ class SMCEngine:
             else:
                 inval_str = "Break of opposing structure"
 
-            # Target Identification & Lifecycle Verification
+            # Target Identification & Semantic Directional Validation
             target_price = None
             target_str = "N/A"
+            target_type = None
             is_target_reached = False
             is_stop_breached = False
 
             if entry.direction == "bullish":
-                # Valid targets must be strictly above entry zone top
-                bull_targets = [l for l in ranked_levels if l.price > (entry_top + 0.1)]
+                # Valid targets for LONG must be strictly above entry zone top AND must be legitimate resistance or buy-side liquidity
+                bull_targets = []
+                for l in ranked_levels:
+                    if l.price > (entry_top + 0.1):
+                        l_name_lower = l.name.lower()
+                        l_type_lower = l.type.lower()
+                        # Reject Sell-Side Liquidity (Equal Lows / SSL / PDL / PWL) as a Long target!
+                        if "equal low" in l_name_lower or "ssl" in l_name_lower or "pdl" in l_name_lower or "pwl" in l_name_lower:
+                            continue
+                        bull_targets.append(l)
+
                 bull_targets.sort(key=lambda l: l.price)
                 if bull_targets:
                     cand = bull_targets[0]
                     target_price = cand.price
+                    target_type = cand.type
                     target_str = f"{cand.name} ({cand.price:.2f})"
-                    # Lifecycle check: Has market price already reached or exceeded this target?
                     if current_price >= target_price:
                         is_target_reached = True
                         target_str = f"{cand.name} ({cand.price:.2f}) [REACHED]"
@@ -354,14 +364,23 @@ class SMCEngine:
                     is_stop_breached = True
 
             elif entry.direction == "bearish":
-                # Valid targets must be strictly below entry zone bottom
-                bear_targets = [l for l in ranked_levels if l.price < (entry_bottom - 0.1)]
+                # Valid targets for SHORT must be strictly below entry zone bottom AND must be legitimate support or sell-side liquidity
+                bear_targets = []
+                for l in ranked_levels:
+                    if l.price < (entry_bottom - 0.1):
+                        l_name_lower = l.name.lower()
+                        l_type_lower = l.type.lower()
+                        # Reject Buy-Side Liquidity (Equal Highs / BSL / PDH / PWH) as a Short target!
+                        if "equal high" in l_name_lower or "bsl" in l_name_lower or "pdh" in l_name_lower or "pwh" in l_name_lower:
+                            continue
+                        bear_targets.append(l)
+
                 bear_targets.sort(key=lambda l: l.price, reverse=True)
                 if bear_targets:
                     cand = bear_targets[0]
                     target_price = cand.price
+                    target_type = cand.type
                     target_str = f"{cand.name} ({cand.price:.2f})"
-                    # Lifecycle check: Has market price already reached or fallen below this target?
                     if current_price <= target_price:
                         is_target_reached = True
                         target_str = f"{cand.name} ({cand.price:.2f}) [REACHED]"
@@ -370,61 +389,182 @@ class SMCEngine:
                 if inval_price is not None and current_price >= inval_price:
                     is_stop_breached = True
 
-            # Determine setup state with strict lifecycle rules:
-            if is_target_reached:
-                t_state = "INVALIDATED"
-                state_reason = f"Target already reached (${target_price:.2f}). Setup expired."
-            elif is_stop_breached:
-                t_state = "INVALIDATED"
-                state_reason = f"Invalidation level breached (${inval_price:.2f}). Setup stopped out."
-            elif entry.state in ["PASSED / INVALIDATED", "SWEPT / MITIGATED", "INVALIDATED / PASSED"]:
-                t_state = "INVALIDATED"
-                state_reason = entry.state_reason
-            elif is_extreme:
-                t_state = "EXTREME"
-                state_reason = entry.state_reason
-            elif entry.state == "CHECKLIST REVIEW":
-                t_state = "ACTIVE"
-                state_reason = entry.state_reason
-            elif entry.state in ["SETUP TO INSPECT", "REACTION DEVELOPING", "AT LEVEL", "AT KEY LEVEL", "APPROACHING"]:
-                t_state = "WATCH"
-                state_reason = entry.state_reason
-            else:
-                t_state = "IDLE"
-                state_reason = entry.state_reason
+            # Directional Trend Alignment & Countertrend Verification
+            daily_trend_str = daily_trend_state.trend.lower()
+            trade_class: Literal["PRO-TREND", "COUNTERTREND (HIGH RISK)", "NEUTRAL"] = "NEUTRAL"
+            dir_context = "NEUTRAL BIAS"
 
-            # Strict Reward / Risk validation
+            if entry.direction == "bullish":
+                if daily_trend_str == "bullish":
+                    trade_class = "PRO-TREND"
+                    dir_context = "PRO-TREND LONG (1D ALIGNED)"
+                elif daily_trend_str == "bearish":
+                    trade_class = "COUNTERTREND (HIGH RISK)"
+                    dir_context = "COUNTERTREND LONG (HIGH RISK) · 1D BIAS IS BEARISH"
+                else:
+                    trade_class = "NEUTRAL"
+                    dir_context = "BULLISH SETUP (1D NEUTRAL)"
+            elif entry.direction == "bearish":
+                if daily_trend_str == "bearish":
+                    trade_class = "PRO-TREND"
+                    dir_context = "PRO-TREND SHORT (1D ALIGNED)"
+                elif daily_trend_str == "bullish":
+                    trade_class = "COUNTERTREND (HIGH RISK)"
+                    dir_context = "COUNTERTREND SHORT (HIGH RISK) · 1D BIAS IS BULLISH"
+                else:
+                    trade_class = "NEUTRAL"
+                    dir_context = "BEARISH SETUP (1D NEUTRAL)"
+
+            # Strict Reward / Risk Validation
             rr_str = "N/A"
-            if not is_target_reached and not is_stop_breached and t_state in ["EXTREME", "ACTIVE", "WATCH"]:
+            rr_val = None
+            if not is_target_reached and not is_stop_breached:
                 if entry.direction == "bullish" and target_price and inval_price:
                     risk = entry_mid - inval_price
                     reward = target_price - entry_mid
-                    # Validate directional ordering: inval < entry < target and current_price < target
                     if risk > 0.05 and reward > 0.05 and inval_price < entry_bottom and target_price > entry_top and current_price < target_price:
                         rr_val = reward / risk
                         rr_str = f"1:{rr_val:.1f}"
                 elif entry.direction == "bearish" and target_price and inval_price:
                     risk = inval_price - entry_mid
                     reward = entry_mid - target_price
-                    # Validate directional ordering: target < entry < inval and current_price > target
                     if risk > 0.05 and reward > 0.05 and inval_price > entry_top and target_price < entry_bottom and current_price > target_price:
                         rr_val = reward / risk
                         rr_str = f"1:{rr_val:.1f}"
 
-            quality_label = "High Confluence" if is_extreme or entry.score >= 80 else ("Confirmed" if entry.state == "CHECKLIST REVIEW" else "Standard")
+            # Canonical Setup State Transitions with Strict Lifecycle Rules
+            canon_state: Literal["WATCH", "WAITING FOR CONFIRMATION", "READY", "ENTERED", "INVALIDATED", "EXPIRED", "IDLE"] = "IDLE"
+            t_state: TerminalSignalState = "IDLE"
+
+            if is_target_reached:
+                canon_state = "EXPIRED"
+                t_state = "EXPIRED"
+                state_reason = f"Target already reached (${target_price:.2f}). Setup expired."
+            elif is_stop_breached:
+                canon_state = "INVALIDATED"
+                t_state = "INVALIDATED"
+                state_reason = f"Invalidation level breached (${inval_price:.2f}). Setup stopped out."
+            elif entry.state in ["PASSED / INVALIDATED", "SWEPT / MITIGATED", "INVALIDATED / PASSED"]:
+                canon_state = "INVALIDATED"
+                t_state = "INVALIDATED"
+                state_reason = entry.state_reason
+            elif entry.state == "CHECKLIST REVIEW":
+                # Check prerequisites: Valid stop, valid target, R:R >= 1.5, clean path
+                if rr_val is not None and rr_val >= 1.5 and target_price and inval_price and not entry.opposing_zone_warning:
+                    canon_state = "READY"
+                    t_state = "EXTREME" if is_extreme else "ACTIVE"
+                    state_reason = "All 5 checklist criteria satisfied with verified SL, TP, and R:R >= 1:1.5."
+                else:
+                    canon_state = "WAITING FOR CONFIRMATION"
+                    t_state = "WATCH"
+                    if rr_val is not None and rr_val < 1.5:
+                        state_reason = f"Checklist met but rejected: Sub-threshold R:R ({rr_str} < 1:1.5)."
+                    elif entry.opposing_zone_warning:
+                        state_reason = f"Checklist met but blocked by opposing HTF zone: {entry.opposing_zone_warning}."
+                    else:
+                        state_reason = "Pending final target/invalidation confirmation."
+            elif entry.state in ["SETUP TO INSPECT", "REACTION DEVELOPING"]:
+                canon_state = "WAITING FOR CONFIRMATION"
+                t_state = "WATCH"
+                state_reason = entry.state_reason
+            elif entry.state in ["AT LEVEL", "AT KEY LEVEL", "APPROACHING", "WAITING"]:
+                canon_state = "WATCH"
+                t_state = "WATCH"
+                state_reason = entry.state_reason
+            else:
+                canon_state = "IDLE"
+                t_state = "IDLE"
+                state_reason = entry.state_reason
+
+            quality_label = "High Confluence" if is_extreme or entry.score >= 80 else ("Confirmed" if canon_state == "READY" else "Standard")
             zone_str = f"{entry.bottom:.2f} - {entry.top:.2f}" if (entry.bottom is not None and entry.top is not None) else f"{entry.price:.2f}"
 
-            dir_context = f"BULLISH BIAS (LONG CONTEXT)" if entry.direction == "bullish" else (f"BEARISH BIAS (SHORT CONTEXT)" if entry.direction == "bearish" else "NEUTRAL BIAS")
-            if t_state == "WATCH":
-                conf_status = "Waiting for confirmation"
-            elif t_state == "ACTIVE":
-                conf_status = "Checklist Confirmed"
-            elif t_state == "EXTREME":
-                conf_status = "Critical Confluence"
-            elif t_state == "INVALIDATED":
-                conf_status = "Setup Invalidated / Expired"
+            if canon_state == "READY":
+                conf_status = "Ready for Manual Inspection"
+            elif canon_state == "WAITING FOR CONFIRMATION":
+                conf_status = "Waiting for Confirmation"
+            elif canon_state == "WATCH":
+                conf_status = "Surveillance (Approaching/At Zone)"
+            elif canon_state in ["INVALIDATED", "EXPIRED"]:
+                conf_status = "Setup Inactive / Expired"
             else:
                 conf_status = "Idle Surveillance"
+
+            # 12-Point Setup Inspector Checklist (Phase 5)
+            inspector_checklist = [
+                {
+                    "id": "daily_bias",
+                    "title": "Daily Directional Bias",
+                    "status": "PASS" if trade_class == "PRO-TREND" else ("FAIL" if trade_class == "COUNTERTREND (HIGH RISK)" else "NOT AVAILABLE"),
+                    "detail": f"1D Bias is {daily_trend_str.upper()}. Setup is {trade_class}."
+                },
+                {
+                    "id": "htf_location",
+                    "title": "HTF Key Level POI",
+                    "status": "PASS" if entry.timeframe in ["1D", "4H", "1W"] else "FAIL",
+                    "detail": f"Originated from {entry.timeframe} {entry.type}."
+                },
+                {
+                    "id": "liquidity_sweep",
+                    "title": "Liquidity Sweep / Rejection",
+                    "status": "PASS" if entry.checklist[1].satisfied else "FAIL",
+                    "detail": entry.checklist[1].evidence
+                },
+                {
+                    "id": "structural_confirmation",
+                    "title": "Trendline Break / MSS",
+                    "status": "PASS" if entry.checklist[2].satisfied else "FAIL",
+                    "detail": entry.checklist[2].evidence
+                },
+                {
+                    "id": "displacement",
+                    "title": "Institutional Displacement",
+                    "status": "PASS" if (len(entry.checklist) > 3 and entry.checklist[3].satisfied) else "FAIL",
+                    "detail": entry.checklist[3].evidence if len(entry.checklist) > 3 else "Pending"
+                },
+                {
+                    "id": "supporting_fvg",
+                    "title": "Supporting LTF FVG",
+                    "status": "PASS" if any("FVG" in ev for ev in entry.evidence) else "FAIL",
+                    "detail": "Supporting FVG detected" if any("FVG" in ev for ev in entry.evidence) else "No supporting FVG formed"
+                },
+                {
+                    "id": "closed_candle_confirm",
+                    "title": "Closed-Candle Confirmation",
+                    "status": "PASS" if any("close" in ev.lower() for ev in entry.evidence) else "FAIL",
+                    "detail": "Confirmed on closed candle" if any("close" in ev.lower() for ev in entry.evidence) else "Pending closed-bar validation"
+                },
+                {
+                    "id": "stop_placement",
+                    "title": "Valid Stop-Loss Placement",
+                    "status": "PASS" if (inval_price is not None and ((entry.direction == 'bullish' and inval_price < entry_bottom) or (entry.direction == 'bearish' and inval_price > entry_top))) else "FAIL",
+                    "detail": inval_str
+                },
+                {
+                    "id": "valid_target",
+                    "title": "Structurally Valid Target",
+                    "status": "PASS" if (target_price is not None and not is_target_reached) else "FAIL",
+                    "detail": target_str
+                },
+                {
+                    "id": "minimum_rr",
+                    "title": "Minimum Reward / Risk (>= 1:1.5)",
+                    "status": "PASS" if (rr_val is not None and rr_val >= 1.5) else "FAIL",
+                    "detail": f"Calculated R:R {rr_str}" if rr_val is not None else "R:R unavailable or < 1:1.5"
+                },
+                {
+                    "id": "friction_assumptions",
+                    "title": "Friction & Basis Disclosed",
+                    "status": "PASS",
+                    "detail": "0.01 tick size, 0.001 XAUT contract, basis spread monitored"
+                },
+                {
+                    "id": "contract_validity",
+                    "title": "Contract Specifications",
+                    "status": "PASS",
+                    "detail": "XAUTUSD Perpetual Futures (Product ID 131253)"
+                }
+            ]
 
             setup_card = ActiveSetupCardData(
                 id=entry.level_id,
@@ -444,12 +584,18 @@ class SMCEngine:
                 invalidation_price=inval_price,
                 target=target_str,
                 target_price=target_price,
+                target_type=target_type,
                 is_target_reached=is_target_reached,
                 reward_risk=rr_str,
+                reward_risk_numeric=round(rr_val, 2) if rr_val is not None else None,
                 quality=quality_label,
                 directional_context=dir_context,
+                trade_classification=trade_class,
+                canonical_setup_state=canon_state,
+                daily_bias=daily_trend_str.upper(),
                 confirmation_status=conf_status,
                 checklist=entry.checklist,
+                inspector_checklist=inspector_checklist,
                 opposing_warning=entry.opposing_zone_warning,
                 last_event_ist=entry.last_event_ist or "N/A"
             )
@@ -484,12 +630,17 @@ class SMCEngine:
         if model_b_setup:
             candidate_setups.append((model_b_setup.state, 90, abs(model_b_setup.distance), model_b_setup))
 
-        # Overall setup state determination
-        state_order = {"EXTREME": 5000, "ACTIVE": 4000, "WATCH": 2000, "INVALIDATED": 100, "IDLE": 0}
+        # Overall setup state determination:
+        # A setup ONLY displays in the top banner if it is READY or actively developing reaction in zone (WAITING FOR CONFIRMATION).
+        # Routine WATCH levels (levels price is just approaching) remain in the Watchlist table and do NOT clutter the top banner.
+        TF_WEIGHTS = {"1D": 400, "4H": 300, "1H": 200, "30M": 100, "15M": 50, "5M": 20, "1M": 10}
+        state_order = {"EXTREME": 5000, "ACTIVE": 4000, "READY": 3000, "WAITING FOR CONFIRMATION": 2500, "WATCH": 2000, "INVALIDATED": 100, "IDLE": 0}
         if any(c[0] == "EXTREME" for c in candidate_setups):
             terminal_setup_state = "EXTREME"
         elif any(c[0] == "ACTIVE" for c in candidate_setups):
             terminal_setup_state = "ACTIVE"
+        elif any(c[0] in ["READY", "WAITING FOR CONFIRMATION"] for c in candidate_setups):
+            terminal_setup_state = "WATCH"
         elif any(c[0] == "WATCH" for c in candidate_setups):
             terminal_setup_state = "WATCH"
         elif any(c[0] == "INVALIDATED" for c in candidate_setups):
@@ -497,13 +648,9 @@ class SMCEngine:
         else:
             terminal_setup_state = "IDLE"
 
-        # Prioritize single active setup card to display prominently
-        # Requirement: 4Hr and Daily have priority!
-        TF_WEIGHTS = {"1D": 400, "4H": 300, "1H": 200, "30M": 100, "15M": 50, "5M": 20, "1M": 10}
-
         active_setup = None
         if candidate_setups:
-            qualifying = [c for c in candidate_setups if c[0] in ["EXTREME", "ACTIVE", "WATCH"]]
+            qualifying = [c for c in candidate_setups if c[0] in ["EXTREME", "ACTIVE", "READY", "WAITING FOR CONFIRMATION", "WATCH"]]
             if not qualifying:
                 qualifying = candidate_setups
             qualifying.sort(

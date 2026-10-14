@@ -466,7 +466,18 @@ class WatchlistAlert(BaseModel):
 # Signal-First Trading Command Center: Unified Terminal State Machine
 # ---------------------------------------------------------------------------
 
-TerminalSignalState = Literal["IDLE", "WATCH", "ACTIVE", "EXTREME", "INVALIDATED", "CRITICAL_RISK"]
+TerminalSignalState = Literal[
+    "IDLE",
+    "WATCH",
+    "WAITING FOR CONFIRMATION",
+    "READY",
+    "ACTIVE",
+    "EXTREME",
+    "ENTERED",
+    "INVALIDATED",
+    "EXPIRED",
+    "CRITICAL_RISK"
+]
 MarketBiasState = Literal["BULLISH", "BEARISH", "MIXED", "NEUTRAL"]
 RiskDataState = Literal["NORMAL", "CAUTION", "CRITICAL"]
 
@@ -490,12 +501,18 @@ class ActiveSetupCardData(BaseModel):
     invalidation_price: Optional[float] = None
     target: str = "N/A"
     target_price: Optional[float] = None
+    target_type: Optional[str] = None
     is_target_reached: bool = False
     reward_risk: str = "N/A"
+    reward_risk_numeric: Optional[float] = None
     quality: str = "Standard"
     directional_context: str = ""
+    trade_classification: Literal["PRO-TREND", "COUNTERTREND (HIGH RISK)", "NEUTRAL"] = "NEUTRAL"
+    canonical_setup_state: Literal["WATCH", "WAITING FOR CONFIRMATION", "READY", "ENTERED", "INVALIDATED", "EXPIRED", "IDLE"] = "IDLE"
+    daily_bias: str = "NEUTRAL"
     confirmation_status: str = ""
     checklist: List[ChecklistItem] = Field(default_factory=list)
+    inspector_checklist: List[Dict[str, Any]] = Field(default_factory=list)
     opposing_warning: Optional[str] = None
     last_event_ist: Optional[str] = "N/A"
 

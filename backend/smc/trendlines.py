@@ -192,6 +192,20 @@ def calculate_trendlines(
                     structural_support_note=note
                 ))
 
-    # Keep only most relevant recent trendlines (e.g. up to 6)
-    trendlines.sort(key=lambda t: t.anchor2_time, reverse=True)
-    return trendlines[:6]
+    # Deduplicate and prioritize high-quality trendlines:
+    # 1. Prefer >= 3 touches over 2 touches.
+    # 2. If multiple trendlines in the same direction project within $4.00 USD of each other,
+    #    keep only the single strongest line with the highest touch count.
+    trendlines.sort(key=lambda t: (t.touch_count, 1 if t.broken else 0, t.anchor2_time), reverse=True)
+    deduped: List[Trendline] = []
+    for tl in trendlines:
+        if tl.current_projected_price is None:
+            continue
+        collides = any(
+            d.direction == tl.direction and abs(d.current_projected_price - tl.current_projected_price) < 4.0
+            for d in deduped
+        )
+        if not collides:
+            deduped.append(tl)
+
+    return deduped[:4]

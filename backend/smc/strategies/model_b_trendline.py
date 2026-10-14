@@ -269,6 +269,7 @@ def evaluate_model_b(
         quality="Institutional" if (has_structural_prep and fvg_confluence) else "Standard",
         directional_context=f"Trendline Breakout ({selected_tl.direction})",
         confirmation_status="Close Confirmed" if selected_tl.break_confirmed_by_close else "Provisional",
+        canonical_setup_state="READY" if signal_state == "ACTIVE" else ("WAITING FOR CONFIRMATION" if signal_state == "WATCH" else "IDLE"),
         checklist=checklist,
         opposing_warning=None,
         last_event_ist=selected_tl.breakout_ist or "N/A"

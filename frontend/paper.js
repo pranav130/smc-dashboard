@@ -291,6 +291,7 @@
     // Global HUD Badge
     const hudBadge = $("hudStatusBadge");
     const hudStatusText = $("hudStatusText");
+    const isEmergency = Boolean(s && s.emergency_stop);
     if (rm.circuit_breaker_active || isEmergency) {
       hudBadge.className = "hud-badge danger";
       hudStatusText.textContent = "CIRCUIT BREAKER ENGAGED";

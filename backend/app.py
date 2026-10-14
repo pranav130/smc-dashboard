@@ -143,9 +143,13 @@ async def _background_market_monitor_loop():
             if current_price <= 0:
                 continue
 
-            # Update open paper positions
+            last_h1 = candles_1h[-1] if candles_1h else None
+            high_val = last_h1.high if last_h1 else current_price
+            low_val = last_h1.low if last_h1 else current_price
+
+            # Update open paper positions with conservative tie-breaker
             paper_engine.on_tick(current_price)
-            paper_trading.mark_to_market(current_price)
+            paper_trading.mark_to_market(current_price, high=high_val, low=low_val)
 
             # Evaluate multi-timeframe SMC signals for paper trading
             candles_by_tf = {
@@ -158,14 +162,38 @@ async def _background_market_monitor_loop():
 
             terminal = analysis.get("terminal_state") or {}
             setup = terminal.get("active_setup") or {}
+
+            # Fallback to decoupled Model A or Model B setups if eligible
+            if not setup or (hasattr(setup, "state") and setup.state != "ACTIVE") or (isinstance(setup, dict) and setup.get("state") != "ACTIVE"):
+                mod_a = analysis.get("model_a_setup")
+                mod_b = analysis.get("model_b_setup")
+                if mod_a and getattr(mod_a, "state", None) == "ACTIVE":
+                    setup = mod_a
+                elif mod_b and getattr(mod_b, "state", None) == "ACTIVE":
+                    setup = mod_b
+
             if hasattr(setup, "model_dump"):
                 setup = setup.model_dump()
-            paper_trading.evaluate(
-                setup,
-                current_price,
-                status.last_update_timestamp,
-                status.is_stale,
-            )
+
+            if setup and setup.get("state") == "ACTIVE":
+                decision = paper_trading.evaluate(
+                    setup,
+                    current_price,
+                    status.last_update_timestamp,
+                    status.is_stale,
+                )
+                if decision.get("accepted"):
+                    logger.info(f"⚡ [24/7 Engine] Executed paper trade for setup {setup.get('id')}: position #{decision.get('position_id')}")
+                elif not decision.get("accepted"):
+                    global_rejection_inspector.record_rejection(
+                        model=setup.get("name", "SMC Setup"),
+                        stage_failed=decision.get("reason", "RISK_REJECTION"),
+                        reasons=[decision.get("message") or decision.get("reason") or "Setup rejected by risk controller"],
+                        evaluated_price=current_price,
+                        setup_id=setup.get("id"),
+                        direction=setup.get("direction"),
+                        telemetry=decision.get("telemetry", {})
+                    )
 
         except asyncio.CancelledError:
             logger.info("24/7 Background Market Monitoring loop stopped.")
@@ -553,6 +581,16 @@ async def paper_tick():
     analysis = smc_engine.analyze_multi_timeframe(candles_by_tf, tf, is_stale=status.is_stale)
     terminal = analysis.get("terminal_state") or {}
     setup = terminal.get("active_setup") or {}
+
+    # Fallback to decoupled Model A or Model B setups if eligible
+    if not setup or (hasattr(setup, "state") and setup.state != "ACTIVE") or (isinstance(setup, dict) and setup.get("state") != "ACTIVE"):
+        mod_a = analysis.get("model_a_setup")
+        mod_b = analysis.get("model_b_setup")
+        if mod_a and getattr(mod_a, "state", None) == "ACTIVE":
+            setup = mod_a
+        elif mod_b and getattr(mod_b, "state", None) == "ACTIVE":
+            setup = mod_b
+
     if hasattr(setup, "model_dump"):
         setup = setup.model_dump()
 

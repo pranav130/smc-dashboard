@@ -159,11 +159,19 @@ def _is_price_in_zone(price: float, top: float, bottom: float, buffer: float = 0
 
 
 def _distance_to_zone(price: float, top: float, bottom: float) -> Tuple[float, float]:
-    """Returns signed distance to nearest boundary: positive if price > top, negative if price < bottom, 0 if inside."""
-    if price > top:
-        return price - top, (price - top)
-    elif price < bottom:
-        return price - bottom, (price - bottom)
+    """
+    Returns (abs_distance, signed_distance) to zone boundaries.
+    Signed distance is positive if zone is above price (+ overhead),
+    negative if zone is below price (- underneath), 0.0 if inside.
+    """
+    if price < bottom:
+        # Zone is above current market price
+        d = bottom - price
+        return d, d
+    elif price > top:
+        # Zone is below current market price
+        d = top - price
+        return abs(d), d
     else:
         return 0.0, 0.0
 
@@ -197,12 +205,12 @@ def evaluate_level_activation(
     zone_width = max(0.01, round(top - bottom, 2)) if (top and bottom) else 0.01
     midpoint = round((top + bottom) / 2.0, 2) if (top and bottom) else price
 
-    # Distance to zone or level
+    # Distance to zone or level: positive = above price, negative = below price
     if top is not None and bottom is not None:
         raw_dist, signed_dist = _distance_to_zone(current_price, top, bottom)
-        dist_to_mid = current_price - midpoint
+        dist_to_mid = midpoint - current_price
     else:
-        signed_dist = current_price - price
+        signed_dist = price - current_price
         dist_to_mid = signed_dist
 
     dist_abs = abs(signed_dist)

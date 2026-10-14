@@ -157,7 +157,7 @@ function initChart() {
     layout: {
       background: { type: "solid", color: isLight ? "#ffffff" : "#07090e" },
       textColor: isLight ? "#475569" : "#8b949e",
-      fontSize: 11,
+      fontSize: 10,
       fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace',
     },
     grid: {
@@ -680,7 +680,7 @@ function drawSMCLevels(analysis) {
         lineWidth: focusSetupMode ? 1.5 : 1,
         lineStyle: LightweightCharts.LineStyle.Dashed,
         axisLabelVisible: true,
-        title: `${prefix}${l.type} (${roleText}: $${l.price.toFixed(2)})`,
+        title: `${prefix}${l.type} ($${l.price.toFixed(2)})`,
       });
     });
 
@@ -690,14 +690,13 @@ function drawSMCLevels(analysis) {
       intLiqs.forEach((l) => {
         const isSelling = l.type === "EQH" || l.price > curPrice;
         const liqColor = isSelling ? "#f23645" : "#00b49f";
-        const roleText = isSelling ? "Sell Liq" : "Buy Liq";
         addCollisionAwarePriceLine({
           price: l.price,
           color: liqColor,
           lineWidth: 1,
           lineStyle: LightweightCharts.LineStyle.Dotted,
           axisLabelVisible: true,
-          title: `${l.type} (${roleText}: $${l.price.toFixed(2)})`,
+          title: `${l.type} ($${l.price.toFixed(2)})`,
         });
       });
     }
@@ -726,8 +725,7 @@ function drawSMCLevels(analysis) {
     const allHtfFvgs = [...dAbove, ...dBelow, ...h4Above, ...h4Below];
     allHtfFvgs.forEach((f) => {
       const isBullish = f.direction === "bullish";
-      const fvgColor = isBullish ? "#00b49f" : "#f23645"; // Green for Bullish (Demand/Buying), Red for Bearish (Supply/Selling)
-      const dirLabel = isBullish ? "Bullish" : "Bearish";
+      const fvgColor = isBullish ? "#00b49f" : "#f23645"; // Green for Bullish (Demand), Red for Bearish (Supply)
       const prefix = focusSetupMode ? "★ " : "";
 
       addCollisionAwarePriceLine({
@@ -736,14 +734,14 @@ function drawSMCLevels(analysis) {
         lineWidth: focusSetupMode ? 1.5 : 1,
         lineStyle: LightweightCharts.LineStyle.SparseDotted,
         axisLabelVisible: true,
-        title: `${prefix}${f.timeframe} ${dirLabel} FVG 50% ($${f.bottom.toFixed(2)} - $${f.top.toFixed(2)})`,
+        title: `${prefix}${f.timeframe} FVG 50% ($${f.bottom.toFixed(2)} - $${f.top.toFixed(2)})`,
       });
     });
   }
 
   // -------------------------------------------------------------------------
   // 3. Higher Timeframe Order Blocks (4H OBs) - Always visible in both modes!
-  // Bullish OB = Support (at or below price); Bearish OB = Resistance (at or above price)
+  // Bullish OB = Support (Green); Bearish OB = Resistance (Red)
   // -------------------------------------------------------------------------
   if (layerToggles.orderBlocks) {
     const h4Obs = (analysis.order_blocks || []).filter(
@@ -753,7 +751,7 @@ function drawSMCLevels(analysis) {
     const h4Bear = h4Obs.filter((o) => o.direction === "bearish" && o.midpoint >= curPrice).slice(-1);
     [...h4Bull, ...h4Bear].forEach((ob) => {
       const isBull = ob.direction === "bullish";
-      const obColor = isBull ? "#00b49f" : "#f23645"; // Green for Bullish, Red for Bearish
+      const obColor = isBull ? "#00b49f" : "#f23645"; // Green for Support, Red for Resistance
       const prefix = focusSetupMode ? "★ " : "";
       addCollisionAwarePriceLine({
         price: ob.midpoint,
@@ -761,7 +759,7 @@ function drawSMCLevels(analysis) {
         lineWidth: focusSetupMode ? 1.5 : 1,
         lineStyle: LightweightCharts.LineStyle.Dashed,
         axisLabelVisible: true,
-        title: `${prefix}[4H] ${ob.direction.toUpperCase()} OB ($${ob.bottom.toFixed(2)} - $${ob.top.toFixed(2)})`,
+        title: `${prefix}[4H] OB ($${ob.bottom.toFixed(2)} - $${ob.top.toFixed(2)})`,
       });
     });
 
@@ -780,7 +778,7 @@ function drawSMCLevels(analysis) {
           lineWidth: 1,
           lineStyle: LightweightCharts.LineStyle.Dashed,
           axisLabelVisible: true,
-          title: `1H ${ob.direction.toUpperCase()} OB ($${ob.bottom.toFixed(2)} - $${ob.top.toFixed(2)})`,
+          title: `1H OB ($${ob.bottom.toFixed(2)} - $${ob.top.toFixed(2)})`,
         });
       });
     }
@@ -795,10 +793,7 @@ function drawSMCLevels(analysis) {
   // 4. Secondary / Intraday Layers (Drawn ONLY when Focus Mode is OFF and enabled)
   // -------------------------------------------------------------------------
 
-  // 4a. Trendlines: Green for Support (Buying), Red for Resistance (Selling)
-  // Strict SMC Rule:
-  // - Support (Buy) TL MUST NOT be broken AND MUST be at or below current price.
-  // - Resistance (Sell) TL MUST NOT be broken AND MUST be at or above current price.
+  // 4a. Trendlines: Green for Support, Red for Resistance
   if (layerToggles.trendlines) {
     const tls = analysis.trendlines || [];
     const supTl = tls.filter((t) => t.direction === "support" && !t.broken && t.current_projected_price && t.current_projected_price <= curPrice).slice(0, 1);
@@ -808,11 +803,11 @@ function drawSMCLevels(analysis) {
         const isSup = tl.direction === "support";
         addCollisionAwarePriceLine({
           price: tl.current_projected_price,
-          color: isSup ? "#00b49f" : "#f23645", // Green for Support (Buy), Red for Resistance (Sell)
+          color: isSup ? "#00b49f" : "#f23645", // Green for Support, Red for Resistance
           lineWidth: 1,
           lineStyle: LightweightCharts.LineStyle.LargeDashed,
           axisLabelVisible: true,
-          title: `${tl.timeframe} ${isSup ? 'Support (Buy)' : 'Resistance (Sell)'} TL ($${tl.current_projected_price.toFixed(2)})`,
+          title: `${tl.timeframe} ${isSup ? 'Support' : 'Resistance'} TL ($${tl.current_projected_price.toFixed(2)})`,
         });
       }
     });
@@ -831,7 +826,7 @@ function drawSMCLevels(analysis) {
         lineWidth: 1,
         lineStyle: LightweightCharts.LineStyle.Dotted,
         axisLabelVisible: true,
-        title: `${f.timeframe} ${isBullish ? 'Bull' : 'Bear'} FVG 50% ($${f.bottom.toFixed(2)} - $${f.top.toFixed(2)})`,
+        title: `${f.timeframe} FVG 50% ($${f.bottom.toFixed(2)} - $${f.top.toFixed(2)})`,
       });
     });
   }
@@ -870,7 +865,7 @@ function drawSMCLevels(analysis) {
         lineWidth: 1,
         lineStyle: LightweightCharts.LineStyle.Solid,
         axisLabelVisible: true,
-        title: `💧 ${z.type} · ${roleText} [${z.score}] ($${z.bottom.toFixed(2)} - $${z.top.toFixed(2)})`,
+        title: `${z.type} [${z.score}] ($${z.bottom.toFixed(2)} - $${z.top.toFixed(2)})`,
       });
     });
   }

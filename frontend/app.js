@@ -248,7 +248,9 @@ async function loadSMCData(timeframe) {
       currentTf = timeframe.toUpperCase();
     }
     if (legendTitle) {
-      legendTitle.textContent = `XAUTUSD · ${currentTf} · DELTA INDIA`;
+      legendTitle.textContent = focusSetupMode
+        ? `XAUTUSD · ${currentTf} · [4H/1D FOCUS]`
+        : `XAUTUSD · ${currentTf} · DELTA INDIA`;
     }
 
     const res = await fetch(`/api/smc?timeframe=${currentTf}`);
@@ -570,8 +572,10 @@ function renderChartData(analysis) {
       clearOverlayLines();
       drawSMCLevels(analysis);
 
-      if (layerToggles.swings) {
+      if (layerToggles.swings && !focusSetupMode) {
         drawChartMarkers(analysis);
+      } else {
+        candleSeries.setMarkers([]);
       }
 
       const last = candles[candles.length - 1];
@@ -624,32 +628,67 @@ function drawSMCLevels(analysis) {
   const setup = analysis.terminal_state?.active_setup;
 
   // -------------------------------------------------------------------------
-  // Priority 1: Focus Setup Mode POI, Target & Invalidation (Highest Priority)
+  // Priority 1: HTF Focus Mode (Strictly 4H and Daily Important Levels Only)
+  // Target and SL levels are suppressed; only high-conviction 4H/Daily levels are shown.
   // -------------------------------------------------------------------------
-  if (focusSetupMode && setup && ["READY", "WAITING FOR CONFIRMATION", "ACTIVE", "EXTREME"].includes(setup.canonical_setup_state || setup.state)) {
-    // Setup Target (TP)
-    if (setup.target_price) {
+  if (focusSetupMode) {
+    // 1. Key Higher-Timeframe Liquidity: Previous Day High/Low (1D) and Previous Week High/Low (1W)
+    const htfLiqs = (analysis.liquidity_levels || []).filter(
+      (l) => !l.swept && ["PDH", "PDL", "PWH", "PWL"].includes(l.type)
+    );
+    htfLiqs.forEach((l) => {
+      const isPD = l.type === "PDH" || l.type === "PDL";
       addCollisionAwarePriceLine({
-        price: setup.target_price,
-        color: "#00b49f",
-        lineWidth: 2,
-        lineStyle: LightweightCharts.LineStyle.Dashed,
+        price: l.price,
+        color: isPD ? (l.type === "PDH" ? "#29b6f6" : "#0288d1") : "#26c6da",
+        lineWidth: 1.5,
+        lineStyle: isPD ? LightweightCharts.LineStyle.Dashed : LightweightCharts.LineStyle.Dotted,
         axisLabelVisible: true,
-        title: `★ TARGET (TP): $${setup.target_price.toFixed(2)}`,
+        title: `★ [HTF] ${l.type} ($${l.price.toFixed(2)})`,
       });
-    }
+    });
 
-    // Setup Invalidation (SL)
-    if (setup.invalidation_price) {
+    // 2. Higher Timeframe Fair Value Gaps: 1D & 4H FVGs (50% Equilibrium Lines)
+    const htfFvgs = [...(analysis.daily_fvgs || []), ...(analysis.h4_fvgs || [])]
+      .filter((f) => !f.mitigated && !f.inverted);
+
+    const fvgsAbove = htfFvgs.filter((f) => f.midpoint > curPrice).sort((a, b) => a.midpoint - b.midpoint).slice(0, 2);
+    const fvgsBelow = htfFvgs.filter((f) => f.midpoint <= curPrice).sort((a, b) => b.midpoint - a.midpoint).slice(0, 2);
+    const renderFvgs = [...fvgsAbove, ...fvgsBelow];
+
+    renderFvgs.forEach((f) => {
+      const isBullish = f.direction === "bullish";
+      const fvgColor = isBullish ? "#00b49f" : "#f97316";
+      const dirLabel = isBullish ? "Bullish" : "Bearish";
+
       addCollisionAwarePriceLine({
-        price: setup.invalidation_price,
-        color: "#f23645",
-        lineWidth: 2,
+        price: f.midpoint,
+        color: fvgColor,
+        lineWidth: 1.5,
+        lineStyle: LightweightCharts.LineStyle.SparseDotted,
+        axisLabelVisible: true,
+        title: `★ [${f.timeframe}] ${dirLabel} FVG 50% ($${f.bottom.toFixed(2)} - $${f.top.toFixed(2)})`,
+      });
+    });
+
+    // 3. Higher Timeframe Order Blocks: 4H OBs only
+    const h4Obs = (analysis.order_blocks || []).filter(
+      (ob) => ob.timeframe === "4H" && !ob.mitigated
+    );
+    const h4Bull = h4Obs.filter((o) => o.direction === "bullish").slice(-1);
+    const h4Bear = h4Obs.filter((o) => o.direction === "bearish").slice(-1);
+    [...h4Bull, ...h4Bear].forEach((ob) => {
+      addCollisionAwarePriceLine({
+        price: ob.midpoint,
+        color: ob.direction === "bullish" ? "#26a69a" : "#ab47bc",
+        lineWidth: 1.5,
         lineStyle: LightweightCharts.LineStyle.Dashed,
         axisLabelVisible: true,
-        title: `★ STOP LOSS (SL): $${setup.invalidation_price.toFixed(2)}`,
+        title: `★ [4H] ${ob.direction.toUpperCase()} OB ($${ob.bottom.toFixed(2)} - $${ob.top.toFixed(2)})`,
       });
-    }
+    });
+
+    return; // Early return to guarantee ONLY 4H and Daily important levels are displayed
   }
 
   // -------------------------------------------------------------------------
@@ -1970,16 +2009,23 @@ function setupFocusSetupControls() {
       btnFocusSetup.classList.toggle("active", focusSetupMode);
     }
     if (focusSetupBtnText) {
-      focusSetupBtnText.textContent = focusSetupMode ? "Focus: ON" : "Focus: OFF";
+      focusSetupBtnText.textContent = focusSetupMode ? "HTF Focus: ON" : "HTF Focus: OFF";
     }
     if (togFocusSetup) {
       togFocusSetup.checked = focusSetupMode;
     }
+    if (legendTitle) {
+      legendTitle.textContent = focusSetupMode
+        ? `XAUTUSD · ${currentTf} · [4H/1D FOCUS MODE]`
+        : `XAUTUSD · ${currentTf} · DELTA INDIA`;
+    }
     if (currentAnalysis) {
       clearOverlayLines();
       drawSMCLevels(currentAnalysis);
-      if (layerToggles.swings) {
+      if (layerToggles.swings && !focusSetupMode) {
         drawChartMarkers(currentAnalysis);
+      } else {
+        candleSeries.setMarkers([]);
       }
     }
   }

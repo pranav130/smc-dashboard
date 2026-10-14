@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>XAUTUSD Terminal · Delta Exchange India | SMC Gold Liquidity Intelligence</title>
-  <link rel="stylesheet" href="/static/styles.css?v=3.2">
+  <link rel="stylesheet" href="/static/styles.css?v=3.3">
   <script src="/static/lightweight-charts.js"></script>
 </head>
 <body>
@@ -173,8 +173,8 @@
             </button>
             <div class="dropdown-popover" id="overlaysPopover" style="display: none;">
               <div class="popover-title">High-Value Overlays (Defaults)</div>
-              <label class="toggle-pill highlight-pill" title="Isolate active setup zone, target, and invalidation while fading distant overlays">
-                <input type="checkbox" id="togFocusSetup"> <span class="dot focus-dot"></span> Focus Setup Mode
+              <label class="toggle-pill highlight-pill" title="Focus strictly on 4H and Daily important key levels, suppressing all secondary layers">
+                <input type="checkbox" id="togFocusSetup"> <span class="dot focus-dot"></span> 4H & Daily Focus Mode
               </label>
               <label class="toggle-pill" title="Higher Timeframe Fair Value Gaps (Daily & 4H) — Peacock Green: Bullish | Orange: Bearish">
                 <input type="checkbox" id="togHtfFvg" checked> <span class="dot htf-fvg"></span> HTF FVGs (1D/4H)
@@ -188,10 +188,10 @@
               <label class="toggle-pill" title="Strict ICT Order Blocks">
                 <input type="checkbox" id="togOrderBlocks" checked> <span class="dot ob"></span> Order Blocks
               </label>
+              <div class="popover-title" style="margin-top: 6px;">Secondary / Micro Layers</div>
               <label class="toggle-pill" title="Toggle Volume Histogram on/off">
                 <input type="checkbox" id="togVolume" checked> <span class="dot vol"></span> Volume Histogram
               </label>
-              <div class="popover-title" style="margin-top: 6px;">Secondary / Micro Layers</div>
               <label class="toggle-pill" title="Current Timeframe Fair Value Gaps">
                 <input type="checkbox" id="togLtfFvg"> <span class="dot ltf-fvg"></span> Current TF FVGs
               </label>
@@ -212,9 +212,9 @@
           </div>
 
           <!-- Focus Setup Quick Action Button -->
-          <button class="btn-focus-setup" id="btnFocusSetup" title="Toggle Focus Mode: Highlight active setup POI, Target & Invalidation while fading secondary overlays">
+          <button class="btn-focus-setup" id="btnFocusSetup" title="Toggle Focus Mode: Display strictly 4H and Daily key levels only">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/><line x1="12" y1="2" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="2" y1="12" x2="5" y2="12"/><line x1="19" y1="12" x2="22" y2="12"/></svg>
-            <span id="focusSetupBtnText">Focus: OFF</span>
+            <span id="focusSetupBtnText">HTF Focus: OFF</span>
           </button>
         </div>
 
@@ -443,6 +443,6 @@
   <!-- In-Browser Toast Notification Container (Phase 7) -->
   <div class="toast-container" id="toastContainer"></div>
 
-  <script src="/static/app.js?v=3.2"></script>
+  <script src="/static/app.js?v=3.3"></script>
 </body>
 </html>

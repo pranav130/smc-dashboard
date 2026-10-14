@@ -217,6 +217,13 @@ function initChart() {
   });
 
   window.addEventListener("resize", resizeChart);
+  if (window.ResizeObserver) {
+    const chartContainer = document.getElementById("chart");
+    if (chartContainer) {
+      const ro = new ResizeObserver(() => resizeChart());
+      ro.observe(chartContainer);
+    }
+  }
   setupToggleListeners();
 }
 
@@ -347,9 +354,10 @@ function renderTerminalState(analysis, status) {
 
   // Update Exchange Source Timestamp in Header
   if (headerSourceTime && status) {
-    const ist = status.last_candle_ist || status.system_time_ist || "";
+    let ist = status.last_candle_ist || status.system_time_ist || "";
     if (ist) {
-      headerSourceTime.textContent = `${ist} IST`;
+      const cleanIst = ist.replace(/\s*IST(\s*IST)*$/, "").trim();
+      headerSourceTime.textContent = `${cleanIst} IST`;
     }
   }
 }
@@ -367,7 +375,7 @@ function renderActiveSetupCard(analysis) {
 
   if (!setup || setup.id === dismissedSetupId || !isActionable) {
     activeSetupContainer.innerHTML = `
-      <div class="active-setup-card idle-card" id="activeSetupCard" style="padding: 7px 14px; margin-bottom: 6px;">
+      <div class="active-setup-card idle-card" id="activeSetupCard" style="padding: 4px 10px; margin-bottom: 3px;">
         <div class="idle-message" style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
           <div style="display: flex; align-items: center; gap: 8px;">
             <span class="idle-indicator" style="background: var(--teal-bull); width: 6px; height: 6px; border-radius: 50%;"></span>
@@ -1018,7 +1026,8 @@ function updateHeaderAndBasis(analysis, status) {
 
   const headerBadge = document.getElementById("headerBadge");
   if (headerBadge) {
-    headerBadge.textContent = "Perpetual Futures (ID 131253) · Ref: .DEXAUTUSD";
+    headerBadge.textContent = "Perp · ID 131253";
+    headerBadge.title = "Tether Gold Token Perpetual Future (Product ID 131253) · Ref Spot: .DEXAUTUSD";
   }
 
   // Live Basis vs Spot Index

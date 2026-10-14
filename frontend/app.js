@@ -1750,6 +1750,55 @@ function setupToggleListeners() {
       }
     });
   });
+
+  const btnClear = document.getElementById("btnClearOverlays");
+  if (btnClear) {
+    btnClear.addEventListener("click", () => {
+      Object.entries(map).forEach(([elemId, propKey]) => {
+        const el = document.getElementById(elemId);
+        if (el) el.checked = false;
+        layerToggles[propKey] = false;
+      });
+      if (volumeSeries) volumeSeries.applyOptions({ visible: false });
+      if (currentAnalysis) {
+        clearOverlayLines();
+        candleSeries.setMarkers([]);
+      }
+    });
+  }
+
+  const btnReset = document.getElementById("btnResetOverlays");
+  if (btnReset) {
+    btnReset.addEventListener("click", () => {
+      const defaults = {
+        htfFvg: true,
+        ltfFvg: false,
+        orderBlocks: true,
+        liquidity: true,
+        hiddenLiquidity: false,
+        trendlines: true,
+        psych: false,
+        swings: false,
+        volume: true,
+      };
+      Object.entries(map).forEach(([elemId, propKey]) => {
+        const el = document.getElementById(elemId);
+        const val = defaults[propKey] || false;
+        if (el) el.checked = val;
+        layerToggles[propKey] = val;
+      });
+      if (volumeSeries) volumeSeries.applyOptions({ visible: defaults.volume });
+      if (currentAnalysis) {
+        clearOverlayLines();
+        drawSMCLevels(currentAnalysis);
+        if (defaults.swings) {
+          drawChartMarkers(currentAnalysis);
+        } else {
+          candleSeries.setMarkers([]);
+        }
+      }
+    });
+  }
 }
 
 // --------------------------------------------------------------------------

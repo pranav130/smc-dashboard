@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>XAUTUSD Terminal · Delta Exchange India | SMC Gold Liquidity Intelligence</title>
-  <link rel="stylesheet" href="/static/styles.css">
+  <link rel="stylesheet" href="/static/styles.css?v=3.2">
   <script src="/static/lightweight-charts.js"></script>
 </head>
 <body>
@@ -204,6 +204,10 @@
               <label class="toggle-pill highlight-pill" title="Hidden Liquidity Intelligence (BSL / SSL Zones & Multi-TF Pools)">
                 <input type="checkbox" id="togHiddenLiquidity"> <span class="dot" style="background: #a855f7;"></span> Hidden Liquidity Pools
               </label>
+              <div style="margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--border-subtle); display: flex; gap: 6px;">
+                <button type="button" id="btnClearOverlays" style="flex: 1; padding: 4px 6px; font-size: 10px; font-weight: 600; background: rgba(242,54,69,0.12); border: 1px solid rgba(242,54,69,0.3); color: var(--red-bear); border-radius: 4px; cursor: pointer;">Clean Candles</button>
+                <button type="button" id="btnResetOverlays" style="flex: 1; padding: 4px 6px; font-size: 10px; font-weight: 600; background: rgba(255,255,255,0.06); border: 1px solid var(--border); color: var(--text-muted); border-radius: 4px; cursor: pointer;">Defaults</button>
+              </div>
             </div>
           </div>
 
@@ -439,6 +443,6 @@
   <!-- In-Browser Toast Notification Container (Phase 7) -->
   <div class="toast-container" id="toastContainer"></div>
 
-  <script src="/static/app.js"></script>
+  <script src="/static/app.js?v=3.2"></script>
 </body>
 </html>

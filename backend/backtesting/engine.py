@@ -119,11 +119,12 @@ class BacktestEngine:
                     target_hit = (bar_high >= target)
                     if stop_hit and target_hit:
                         closed = True
-                        exit_price = stop
+                        # If market gapped down below stop on bar open, fill at adverse open
+                        exit_price = min(stop, current_bar.open)
                         exit_reason = "STOP_LOSS"
                     elif stop_hit:
                         closed = True
-                        exit_price = stop
+                        exit_price = min(stop, current_bar.open)
                         exit_reason = "STOP_LOSS"
                     elif target_hit:
                         closed = True
@@ -134,11 +135,12 @@ class BacktestEngine:
                     target_hit = (bar_low <= target)
                     if stop_hit and target_hit:
                         closed = True
-                        exit_price = stop
+                        # If market gapped up above stop on bar open, fill at adverse open
+                        exit_price = max(stop, current_bar.open)
                         exit_reason = "STOP_LOSS"
                     elif stop_hit:
                         closed = True
-                        exit_price = stop
+                        exit_price = max(stop, current_bar.open)
                         exit_reason = "STOP_LOSS"
                     elif target_hit:
                         closed = True
@@ -175,7 +177,8 @@ class BacktestEngine:
                         "fees": round(entry_fee + exit_fee, 4),
                         "exit_reason": exit_reason,
                         "equity_after": equity,
-                        "r_multiple": round(net_pnl / (r_dist * qty), 2) if (r_dist * qty) > 0 else 0.0
+                        "r_multiple": round(net_pnl / (r_dist * qty), 2) if (r_dist * qty) > 0 else 0.0,
+                        "regime": pos.get("regime", "RANGING_CONSOLIDATION")
                     })
                     equity_curve.append(equity)
                     rm.update_equity(equity, current_bar.time)
@@ -234,6 +237,14 @@ class BacktestEngine:
                         fill_entry = (entry_p + slip) if dir_str in ("LONG", "BULLISH") else (entry_p - slip)
                         entry_fee = fill_entry * qty * self.fee_rate
 
+                        htf_b = str(analysis.get("bias", {}).get("bias", "")).upper()
+                        if "BULL" in htf_b or "LONG" in htf_b:
+                            regime_tag = "TRENDING_BULLISH"
+                        elif "BEAR" in htf_b or "SHORT" in htf_b:
+                            regime_tag = "TRENDING_BEARISH"
+                        else:
+                            regime_tag = "RANGING_CONSOLIDATION"
+
                         active_position = {
                             "model": model_tag,
                             "direction": "LONG" if dir_str in ("LONG", "BULLISH") else "SHORT",
@@ -244,7 +255,8 @@ class BacktestEngine:
                             "quantity": qty,
                             "entry_fee": entry_fee,
                             "entry_time": current_bar.time,
-                            "be_triggered": False
+                            "be_triggered": False,
+                            "regime": regime_tag
                         }
 
         # 3. Calculate Performance Metrics
@@ -359,6 +371,34 @@ class BacktestEngine:
 
         calmar_ratio = (return_pct / max_dd_pct) if max_dd_pct > 0 else 0.0
 
+        # Breakdown by Market Regime
+        regimes: Dict[str, Dict[str, Any]] = {}
+        for t in trades:
+            regime = t.get("regime", "UNCLASSIFIED")
+            if regime not in regimes:
+                regimes[regime] = {"trades": 0, "wins": 0, "gross_profit": 0.0, "gross_loss": 0.0, "net_pnl": 0.0}
+            regimes[regime]["trades"] += 1
+            if t["net_pnl"] > 0:
+                regimes[regime]["wins"] += 1
+                regimes[regime]["gross_profit"] += t.get("gross_pnl", 0.0)
+            else:
+                regimes[regime]["gross_loss"] += abs(t.get("gross_pnl", 0.0))
+            regimes[regime]["net_pnl"] += t["net_pnl"]
+
+        regime_breakdown = {}
+        for r_name, r_data in regimes.items():
+            cnt = r_data["trades"]
+            w_cnt = r_data["wins"]
+            gp = r_data["gross_profit"]
+            gl = r_data["gross_loss"]
+            regime_breakdown[r_name] = {
+                "trades": cnt,
+                "win_rate_pct": round((w_cnt / cnt) * 100.0, 2) if cnt > 0 else 0.0,
+                "profit_factor": round(gp / gl, 2) if gl > 0 else (99.0 if gp > 0 else 1.0),
+                "net_pnl": round(r_data["net_pnl"], 2),
+                "expectancy_dollars": round(r_data["net_pnl"] / cnt, 2) if cnt > 0 else 0.0
+            }
+
         return {
             "split": split_name,
             "strategy": strategy_mode,
@@ -379,6 +419,7 @@ class BacktestEngine:
             "sortino_ratio": round(sortino_ratio, 2),
             "calmar_ratio": round(calmar_ratio, 2),
             "ending_equity": round(equity_curve[-1], 2),
+            "regime_breakdown": regime_breakdown,
             "trades": trades
         }
 

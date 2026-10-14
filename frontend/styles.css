@@ -1007,11 +1007,11 @@ body {
   display: inline-block;
 }
 
-.dot.htf-fvg { background: var(--fvg-peacock-green); }
+.dot.htf-fvg { background: var(--teal-bull); }
 .dot.ltf-fvg { background: #29b6f6; }
 .dot.ob { background: #ab47bc; }
-.dot.liq { background: #ffa726; }
-.dot.tl { background: #26a69a; }
+.dot.liq { background: #00b49f; }
+.dot.tl { background: #00b49f; }
 .dot.psych { background: #d97706; }
 .dot.swings { background: #00b49f; }
 .dot.vol { background: #545d68; }

@@ -495,6 +495,30 @@ def _execute_close(
     global_risk_manager.update_equity(new_eq, now)
     global_risk_manager.discipline.record_trade_result(net_pnl, now)
 
+    # Execution risk breach monitoring (adverse gaps, extreme slippage)
+    if net_pnl < 0:
+        actual_loss = abs(net_pnl)
+        initial_stop = float(pos.get("initial_stop") or pos["stop_loss"])
+        notional_entry = entry * qty
+        planned_loss = abs(entry - initial_stop) * qty + (2.0 * cfg["fee_rate"] + 2.0 * (cfg["slippage_bps"] / 10000.0)) * notional_entry
+        if actual_loss > planned_loss * 1.05:
+            _log_event(
+                c,
+                "RISK_BUDGET_BREACH",
+                setup_id=pos["setup_id"],
+                position_id=pos["id"],
+                detail={
+                    "planned_risk": round(planned_loss, 4),
+                    "actual_loss": round(actual_loss, 4),
+                    "excess_loss": round(actual_loss - planned_loss, 4),
+                    "fill_price": fill_price,
+                    "reason": reason,
+                    "action": "ENGINE_PAUSED_FOR_REVIEW"
+                }
+            )
+            _set_meta(c, "engine_state", "PAUSED")
+            global_risk_manager.record_execution_result(planned_loss, actual_loss, {"position_id": pos["id"], "reason": reason})
+
 def evaluate(setup: Optional[Dict[str, Any]], price: float, price_ts: int, is_stale: bool) -> Dict[str, Any]:
     now = time.time()
     with LOCK, _database() as c:

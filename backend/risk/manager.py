@@ -71,6 +71,25 @@ class RiskManager:
 
         self.circuit_breaker_tripped = False
         self.circuit_breaker_reason: Optional[str] = None
+        self.execution_breach_active = False
+        self.execution_breach_details: Optional[Dict[str, Any]] = None
+
+    def record_execution_result(self, planned_risk: float, actual_loss: float, details: Optional[Dict[str, Any]] = None):
+        """
+        Monitor execution quality against planned risk budget.
+        If actual loss exceeds planned risk (due to adverse price gaps, catastrophic slippage, etc.),
+        log the violation, halt new entries, and require manual review.
+        """
+        if actual_loss > 0 and planned_risk > 0 and (actual_loss > planned_risk * 1.05):
+            self.execution_breach_active = True
+            self.execution_breach_details = {
+                "planned_risk": round(planned_risk, 4),
+                "actual_loss": round(actual_loss, 4),
+                "excess_loss": round(actual_loss - planned_risk, 4),
+                "breach_pct": round(((actual_loss - planned_risk) / planned_risk) * 100.0, 2),
+                "timestamp": time.time(),
+                "details": details or {}
+            }
 
     def update_equity(self, new_equity: float, now: Optional[float] = None):
         """Update current equity and track peak drawdown."""
@@ -103,9 +122,11 @@ class RiskManager:
             self.week_start_equity = self.current_equity
 
     def reset_circuit_breaker(self):
-        """Explicit operator reset of peak-to-trough circuit breaker."""
+        """Explicit operator reset of peak-to-trough circuit breaker and execution breaches."""
         self.circuit_breaker_tripped = False
         self.circuit_breaker_reason = None
+        self.execution_breach_active = False
+        self.execution_breach_details = None
         self.peak_equity = self.current_equity
 
     def evaluate_order(
@@ -152,6 +173,16 @@ class RiskManager:
         # 2. Circuit Breaker Check
         if self.circuit_breaker_tripped:
             return self._reject("CIRCUIT_BREAKER_ACTIVE", self.circuit_breaker_reason or "Circuit breaker active", telemetry)
+
+        # 2b. Execution Loss Breach Check (Price Gap / Catastrophic Slippage)
+        if self.execution_breach_active:
+            details = self.execution_breach_details or {}
+            breach_msg = (
+                f"Execution loss breach active: actual loss (${details.get('actual_loss', 0.0):.2f}) "
+                f"exceeded planned risk (${details.get('planned_risk', 0.0):.2f}) by "
+                f"{details.get('breach_pct', 0.0)}%. Manual operator review required."
+            )
+            return self._reject("EXECUTION_BREACH_ACTIVE", breach_msg, telemetry)
 
         # 3. Daily Loss Limit Check (1.0% of day start equity)
         daily_loss = self.day_start_equity - self.current_equity
@@ -206,27 +237,40 @@ class RiskManager:
         if loss_per_contract <= 0:
             return self._reject("ZERO_LOSS_PER_CONTRACT", "Stop loss equals entry price", telemetry)
 
-        # Exact integer contract units: floor(risk_budget / loss_per_contract)
-        qty_contracts = math.floor(risk_budget / loss_per_contract)
+        # Realistic friction per contract: round-trip taker fees + adverse slippage
+        notional_per_contract = entry_price * self.contract_multiplier
+        round_trip_fee_rate = 2.0 * self.taker_fee_rate
+        round_trip_slippage_rate = 2.0 * (self.slippage_bps / 10000.0)
+        friction_per_contract = (round_trip_fee_rate + round_trip_slippage_rate) * notional_per_contract
+        net_loss_per_contract = loss_per_contract + friction_per_contract
+
+        if net_loss_per_contract <= 0:
+            return self._reject("ZERO_LOSS_PER_CONTRACT", "Net loss per contract is non-positive", telemetry)
+
+        # Exact integer contract units sized against total planned net loss (never exceed risk_budget)
+        qty_contracts = math.floor(risk_budget / net_loss_per_contract)
 
         # Reject if budget < 1 contract (never round up to avoid risk breach)
         if qty_contracts < 1:
             return self._reject(
                 "BUDGET_BELOW_MIN_CONTRACT",
-                f"Risk budget (${risk_budget:.2f}) is insufficient for 1 contract (${loss_per_contract:.2f} risk)",
+                f"Risk budget (${risk_budget:.4f}) is insufficient for 1 contract after fees and slippage (${net_loss_per_contract:.4f} net risk)",
                 telemetry
             )
 
         # Cap by Max Notional ($2,500)
-        notional_per_contract = entry_price * self.contract_multiplier
         max_contracts_by_notional = math.floor(self.max_notional_cap / notional_per_contract)
         if qty_contracts > max_contracts_by_notional:
             qty_contracts = max_contracts_by_notional
 
+        # Defensive guard: reduce quantity until planned max net loss <= risk_budget
+        while qty_contracts > 0 and (qty_contracts * net_loss_per_contract) > (risk_budget + 1e-9):
+            qty_contracts -= 1
+
         if qty_contracts < 1:
             return self._reject(
-                "NOTIONAL_CAP_EXCEEDED",
-                f"Single contract notional (${notional_per_contract:.2f}) exceeds cap (${self.max_notional_cap:.2f})",
+                "BUDGET_BELOW_MIN_CONTRACT",
+                f"Risk budget (${risk_budget:.4f}) is insufficient after friction and notional constraints",
                 telemetry
             )
 
@@ -267,6 +311,8 @@ class RiskManager:
             "notional": round(total_notional, 2),
             "risk_budget": round(risk_budget, 4),
             "actual_dollar_risk": round(gross_risk, 4),
+            "planned_max_net_loss": round(net_risk, 4),
+            "max_risk_pct": round(net_risk / self.current_equity * 100.0, 4),
             "estimated_fees": round(round_trip_fee, 4),
             "estimated_slippage": round(round_trip_slippage, 4),
             "net_rr": round(net_rr, 2),

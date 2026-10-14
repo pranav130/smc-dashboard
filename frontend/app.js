@@ -23,17 +23,18 @@ let isDrawerPinned = false;
 let activeDrawerPane = null;
 let focusSetupMode = false;
 
-// Overlay Layer Toggles (High-value defaults enabled; secondary clutter hidden by default)
+// Overlay Layer Toggles (High-value defaults enabled; secondary category unticked by default)
 const layerToggles = {
   htfFvg: true,
-  ltfFvg: false,
-  orderBlocks: true,
-  liquidity: true,
-  hiddenLiquidity: false,
   trendlines: true,
+  liquidity: true,
+  orderBlocks: true,
+  // Secondary / Micro Layers (All unticked by default)
+  volume: false,
+  ltfFvg: false,
   psych: false,
   swings: false,
-  volume: true,
+  hiddenLiquidity: false,
 };
 
 let currentLiqFilter = "all";
@@ -193,6 +194,7 @@ function initChart() {
     priceFormat: { type: "volume" },
     priceScaleId: "",
     scaleMargins: { top: 0.82, bottom: 0 },
+    visible: layerToggles.volume,
   });
 
   chart.subscribeCrosshairMove((param) => {
@@ -625,121 +627,162 @@ function drawSMCLevels(analysis) {
   placedPriceLabels = [];
 
   const curPrice = analysis.current_price || (latestCandle ? latestCandle.close : 0);
-  const setup = analysis.terminal_state?.active_setup;
 
   // -------------------------------------------------------------------------
-  // Priority 1: HTF Focus Mode (Strictly 4H and Daily Important Levels Only)
-  // Target and SL levels are suppressed; only high-conviction 4H/Daily levels are shown.
+  // 1. Key Higher-Timeframe Liquidity: PDH, PDL, PWH, PWL (Always visible in both modes!)
+  // Colors strictly consistent with buying/selling:
+  // Buying Liquidity (Lows: PDL, PWL, EQL, SSL) = Green (#00b49f)
+  // Selling Liquidity (Highs: PDH, PWH, EQH, BSL) = Red (#f23645)
   // -------------------------------------------------------------------------
-  if (focusSetupMode) {
-    // 1. Key Higher-Timeframe Liquidity: Previous Day High/Low (1D) and Previous Week High/Low (1W)
-    const htfLiqs = (analysis.liquidity_levels || []).filter(
+  if (layerToggles.liquidity) {
+    const allLiqs = analysis.liquidity_levels || [];
+
+    // Always render all unswept Macro HTF levels (PDH, PDL, PWH, PWL) without slicing them off
+    const macroHtf = allLiqs.filter(
       (l) => !l.swept && ["PDH", "PDL", "PWH", "PWL"].includes(l.type)
     );
-    htfLiqs.forEach((l) => {
-      const isPD = l.type === "PDH" || l.type === "PDL";
+    macroHtf.forEach((l) => {
+      const isSelling = l.type === "PDH" || l.type === "PWH";
+      const liqColor = isSelling ? "#f23645" : "#00b49f"; // Red for Selling (Supply/Highs), Green for Buying (Demand/Lows)
+      const roleText = isSelling ? "Sell Liq" : "Buy Liq";
+      const prefix = focusSetupMode ? "★ [HTF] " : "";
+
       addCollisionAwarePriceLine({
         price: l.price,
-        color: isPD ? (l.type === "PDH" ? "#29b6f6" : "#0288d1") : "#26c6da",
-        lineWidth: 1.5,
-        lineStyle: isPD ? LightweightCharts.LineStyle.Dashed : LightweightCharts.LineStyle.Dotted,
+        color: liqColor,
+        lineWidth: focusSetupMode ? 1.5 : 1,
+        lineStyle: LightweightCharts.LineStyle.Dashed,
         axisLabelVisible: true,
-        title: `★ [HTF] ${l.type} ($${l.price.toFixed(2)})`,
+        title: `${prefix}${l.type} (${roleText}: $${l.price.toFixed(2)})`,
       });
     });
 
-    // 2. Higher Timeframe Fair Value Gaps: 1D & 4H FVGs (50% Equilibrium Lines)
-    const htfFvgs = [...(analysis.daily_fvgs || []), ...(analysis.h4_fvgs || [])]
-      .filter((f) => !f.mitigated && !f.inverted);
+    // In Focus OFF mode, also display nearest unswept Equal Highs / Equal Lows (EQH / EQL)
+    if (!focusSetupMode) {
+      const intLiqs = allLiqs.filter((l) => !l.swept && (l.type === "EQH" || l.type === "EQL")).slice(0, 2);
+      intLiqs.forEach((l) => {
+        const isSelling = l.type === "EQH" || l.price > curPrice;
+        const liqColor = isSelling ? "#f23645" : "#00b49f";
+        const roleText = isSelling ? "Sell Liq" : "Buy Liq";
+        addCollisionAwarePriceLine({
+          price: l.price,
+          color: liqColor,
+          lineWidth: 1,
+          lineStyle: LightweightCharts.LineStyle.Dotted,
+          axisLabelVisible: true,
+          title: `${l.type} (${roleText}: $${l.price.toFixed(2)})`,
+        });
+      });
+    }
+  }
 
-    const fvgsAbove = htfFvgs.filter((f) => f.midpoint > curPrice).sort((a, b) => a.midpoint - b.midpoint).slice(0, 2);
-    const fvgsBelow = htfFvgs.filter((f) => f.midpoint <= curPrice).sort((a, b) => b.midpoint - a.midpoint).slice(0, 2);
-    const renderFvgs = [...fvgsAbove, ...fvgsBelow];
+  // -------------------------------------------------------------------------
+  // 2. Higher Timeframe Fair Value Gaps (1D & 4H FVGs) - Always visible in both modes!
+  // Daily and 4H FVGs are separated so 4H FVGs never hide Daily FVGs.
+  // -------------------------------------------------------------------------
+  if (layerToggles.htfFvg) {
+    // 2a. Daily FVGs (nearest unmitigated above and below)
+    const dailyFvgs = (analysis.daily_fvgs || []).filter((f) => !f.mitigated && !f.inverted);
+    const dAbove = dailyFvgs.filter((f) => f.midpoint > curPrice).sort((a, b) => a.midpoint - b.midpoint).slice(0, 1);
+    const dBelow = dailyFvgs.filter((f) => f.midpoint <= curPrice).sort((a, b) => b.midpoint - a.midpoint).slice(0, 1);
 
-    renderFvgs.forEach((f) => {
+    // 2b. 4H FVGs (nearest unmitigated above and below)
+    const h4Fvgs = (analysis.h4_fvgs || []).filter((f) => !f.mitigated && !f.inverted);
+    const h4Above = h4Fvgs.filter((f) => f.midpoint > curPrice).sort((a, b) => a.midpoint - b.midpoint).slice(0, 2);
+    const h4Below = h4Fvgs.filter((f) => f.midpoint <= curPrice).sort((a, b) => b.midpoint - a.midpoint).slice(0, 2);
+
+    const allHtfFvgs = [...dAbove, ...dBelow, ...h4Above, ...h4Below];
+    allHtfFvgs.forEach((f) => {
       const isBullish = f.direction === "bullish";
-      const fvgColor = isBullish ? "#00b49f" : "#f97316";
+      const fvgColor = isBullish ? "#00b49f" : "#f23645"; // Green for Bullish (Demand/Buying), Red for Bearish (Supply/Selling)
       const dirLabel = isBullish ? "Bullish" : "Bearish";
+      const prefix = focusSetupMode ? "★ " : "";
 
       addCollisionAwarePriceLine({
         price: f.midpoint,
         color: fvgColor,
-        lineWidth: 1.5,
+        lineWidth: focusSetupMode ? 1.5 : 1,
         lineStyle: LightweightCharts.LineStyle.SparseDotted,
         axisLabelVisible: true,
-        title: `★ [${f.timeframe}] ${dirLabel} FVG 50% ($${f.bottom.toFixed(2)} - $${f.top.toFixed(2)})`,
+        title: `${prefix}${f.timeframe} ${dirLabel} FVG 50% ($${f.bottom.toFixed(2)} - $${f.top.toFixed(2)})`,
       });
     });
+  }
 
-    // 3. Higher Timeframe Order Blocks: 4H OBs only
+  // -------------------------------------------------------------------------
+  // 3. Higher Timeframe Order Blocks (4H OBs) - Always visible in both modes!
+  // -------------------------------------------------------------------------
+  if (layerToggles.orderBlocks) {
     const h4Obs = (analysis.order_blocks || []).filter(
       (ob) => ob.timeframe === "4H" && !ob.mitigated
     );
     const h4Bull = h4Obs.filter((o) => o.direction === "bullish").slice(-1);
     const h4Bear = h4Obs.filter((o) => o.direction === "bearish").slice(-1);
     [...h4Bull, ...h4Bear].forEach((ob) => {
+      const isBull = ob.direction === "bullish";
+      const obColor = isBull ? "#00b49f" : "#f23645"; // Green for Bullish, Red for Bearish
+      const prefix = focusSetupMode ? "★ " : "";
       addCollisionAwarePriceLine({
         price: ob.midpoint,
-        color: ob.direction === "bullish" ? "#26a69a" : "#ab47bc",
-        lineWidth: 1.5,
+        color: obColor,
+        lineWidth: focusSetupMode ? 1.5 : 1,
         lineStyle: LightweightCharts.LineStyle.Dashed,
         axisLabelVisible: true,
-        title: `★ [4H] ${ob.direction.toUpperCase()} OB ($${ob.bottom.toFixed(2)} - $${ob.top.toFixed(2)})`,
+        title: `${prefix}[4H] ${ob.direction.toUpperCase()} OB ($${ob.bottom.toFixed(2)} - $${ob.top.toFixed(2)})`,
       });
     });
 
-    return; // Early return to guarantee ONLY 4H and Daily important levels are displayed
+    // In Focus OFF mode, also display nearest 1H intermediate Order Block
+    if (!focusSetupMode) {
+      const h1Obs = (analysis.order_blocks || []).filter(
+        (ob) => ob.timeframe === "1H" && !ob.mitigated
+      );
+      const h1Bull = h1Obs.filter((o) => o.direction === "bullish").slice(-1);
+      const h1Bear = h1Obs.filter((o) => o.direction === "bearish").slice(-1);
+      [...h1Bull, ...h1Bear].forEach((ob) => {
+        const isBull = ob.direction === "bullish";
+        addCollisionAwarePriceLine({
+          price: ob.midpoint,
+          color: isBull ? "#00b49f" : "#f23645",
+          lineWidth: 1,
+          lineStyle: LightweightCharts.LineStyle.Dashed,
+          axisLabelVisible: true,
+          title: `1H ${ob.direction.toUpperCase()} OB ($${ob.bottom.toFixed(2)} - $${ob.top.toFixed(2)})`,
+        });
+      });
+    }
+  }
+
+  // If Focus Mode is ON, early return to remove all secondary/intraday noise!
+  if (focusSetupMode) {
+    return;
   }
 
   // -------------------------------------------------------------------------
-  // 1. Liquidity Levels (Only Active Unswept PDH, PDL, PWH, PWL)
+  // 4. Secondary / Intraday Layers (Drawn ONLY when Focus Mode is OFF and enabled)
   // -------------------------------------------------------------------------
-  if (layerToggles.liquidity) {
-    const liqs = (analysis.liquidity_levels || []).filter((l) => !l.swept);
-    liqs.slice(0, 4).forEach((l) => {
-      const isPD = l.type === "PDH" || l.type === "PDL";
-      addCollisionAwarePriceLine({
-        price: l.price,
-        color: isPD ? (l.type === "PDH" ? "#29b6f6" : "#0288d1") : "#26c6da",
-        lineWidth: 1,
-        lineStyle: isPD ? LightweightCharts.LineStyle.Dashed : LightweightCharts.LineStyle.Dotted,
-        axisLabelVisible: true,
-        title: `${l.type} ($${l.price.toFixed(2)})`,
-      });
+
+  // 4a. Trendlines: Green for Support (Buying), Red for Resistance (Selling)
+  if (layerToggles.trendlines) {
+    const tls = analysis.trendlines || [];
+    const resTl = tls.filter((t) => t.direction === "resistance").slice(0, 1);
+    const supTl = tls.filter((t) => t.direction === "support").slice(0, 1);
+    [...resTl, ...supTl].forEach((tl) => {
+      if (tl.current_projected_price) {
+        const isSup = tl.direction === "support";
+        addCollisionAwarePriceLine({
+          price: tl.current_projected_price,
+          color: isSup ? "#00b49f" : "#f23645", // Green for Support (Buy), Red for Resistance (Sell)
+          lineWidth: 1,
+          lineStyle: LightweightCharts.LineStyle.LargeDashed,
+          axisLabelVisible: true,
+          title: `${tl.timeframe} ${isSup ? 'Support (Buy)' : 'Resistance (Sell)'} TL ($${tl.current_projected_price.toFixed(2)})`,
+        });
+      }
     });
   }
 
-  // -------------------------------------------------------------------------
-  // 2. Higher Timeframe FVGs (1D & 4H) - Strictly Top 2 Above and Top 2 Below
-  // -------------------------------------------------------------------------
-  if (layerToggles.htfFvg) {
-    const htfFvgs = [...(analysis.daily_fvgs || []), ...(analysis.h4_fvgs || [])]
-      .filter((f) => !f.mitigated && !f.inverted);
-
-    const fvgsAbove = htfFvgs.filter((f) => f.midpoint > curPrice).sort((a, b) => a.midpoint - b.midpoint).slice(0, 2);
-    const fvgsBelow = htfFvgs.filter((f) => f.midpoint <= curPrice).sort((a, b) => b.midpoint - a.midpoint).slice(0, 2);
-    const renderFvgs = [...fvgsAbove, ...fvgsBelow];
-
-    renderFvgs.forEach((f) => {
-      const isBullish = f.direction === "bullish";
-      const fvgColor = isBullish ? "#00b49f" : "#f97316";
-      const dirLabel = isBullish ? "Bullish" : "Bearish";
-
-      // Draw single 50% Midpoint POI line per FVG to prevent chart label stacking
-      addCollisionAwarePriceLine({
-        price: f.midpoint,
-        color: fvgColor,
-        lineWidth: 1,
-        lineStyle: LightweightCharts.LineStyle.SparseDotted,
-        axisLabelVisible: true,
-        title: `${f.timeframe} ${dirLabel} FVG 50% ($${f.bottom.toFixed(2)} - $${f.top.toFixed(2)})`,
-      });
-    });
-  }
-
-  // -------------------------------------------------------------------------
-  // 3. Current Timeframe FVGs (Only 1 nearest above and 1 nearest below)
-  // -------------------------------------------------------------------------
+  // 4b. Current Timeframe FVGs (1H / 30M)
   if (layerToggles.ltfFvg && (currentTf === "1H" || currentTf === "30M")) {
     const ltfList = (analysis.timeframe_fvgs || []).filter((f) => !f.mitigated && !f.inverted);
     const ltfAbove = ltfList.filter((f) => f.midpoint > curPrice).sort((a, b) => a.midpoint - b.midpoint).slice(0, 1);
@@ -757,29 +800,8 @@ function drawSMCLevels(analysis) {
     });
   }
 
-  // -------------------------------------------------------------------------
-  // 4. Order Blocks (Nearest 1 bullish and 1 bearish)
-  // -------------------------------------------------------------------------
-  if (layerToggles.orderBlocks) {
-    const obs = (analysis.order_blocks || []).filter((ob) => !ob.mitigated);
-    const obBull = obs.filter((o) => o.direction === "bullish").slice(-1);
-    const obBear = obs.filter((o) => o.direction === "bearish").slice(-1);
-    [...obBull, ...obBear].forEach((ob) => {
-      addCollisionAwarePriceLine({
-        price: ob.midpoint,
-        color: ob.direction === "bullish" ? "#26a69a" : "#ab47bc",
-        lineWidth: 1,
-        lineStyle: LightweightCharts.LineStyle.Dashed,
-        axisLabelVisible: true,
-        title: `${ob.timeframe} ${ob.direction.toUpperCase()} OB ($${ob.bottom.toFixed(2)} - $${ob.top.toFixed(2)})`,
-      });
-    });
-  }
-
-  // -------------------------------------------------------------------------
-  // 5. Psychological 20s and 80s Levels (At most 1 nearest level, if enabled)
-  // -------------------------------------------------------------------------
-  if (layerToggles.psych && !focusSetupMode) {
+  // 4c. Psychological 20s and 80s Levels
+  if (layerToggles.psych) {
     const psychs = (analysis.psychological_levels || [])
       .slice()
       .sort((a, b) => Math.abs(a.price - curPrice) - Math.abs(b.price - curPrice))
@@ -796,45 +818,23 @@ function drawSMCLevels(analysis) {
     });
   }
 
-  // -------------------------------------------------------------------------
-  // 6. Trendlines (At most 2 deduplicated lines: 1 resistance, 1 support)
-  // -------------------------------------------------------------------------
-  if (layerToggles.trendlines && !focusSetupMode) {
-    const tls = analysis.trendlines || [];
-    const resTl = tls.filter((t) => t.direction === "resistance").slice(0, 1);
-    const supTl = tls.filter((t) => t.direction === "support").slice(0, 1);
-    [...resTl, ...supTl].forEach((tl) => {
-      if (tl.current_projected_price) {
-        addCollisionAwarePriceLine({
-          price: tl.current_projected_price,
-          color: tl.direction === "resistance" ? "#ef5350" : "#26a69a",
-          lineWidth: 1,
-          lineStyle: LightweightCharts.LineStyle.LargeDashed,
-          axisLabelVisible: true,
-          title: `${tl.timeframe} TL (${tl.touch_count}T: $${tl.current_projected_price.toFixed(2)})`,
-        });
-      }
-    });
-  }
-
-  // -------------------------------------------------------------------------
-  // 7. Hidden Liquidity Zones (If enabled, at most 2 nearest high-conviction)
-  // -------------------------------------------------------------------------
-  if (layerToggles.hiddenLiquidity && !focusSetupMode) {
+  // 4d. Hidden Liquidity Zones: Green for SSL (Buy), Red for BSL (Sell)
+  if (layerToggles.hiddenLiquidity) {
     const zones = (analysis.liquidity_intelligence?.zones || [])
       .filter((z) => z.status !== "INVALIDATED" && z.score >= 75)
       .slice(0, 2);
 
     zones.forEach((z) => {
       const isBsl = z.type.includes("BSL");
-      const baseColor = isBsl ? "#00b4af" : "#f97316";
+      const baseColor = isBsl ? "#f23645" : "#00b49f"; // Red for BSL (Selling), Green for SSL (Buying)
+      const roleText = isBsl ? "Sell Liq" : "Buy Liq";
       addCollisionAwarePriceLine({
         price: z.price,
         color: baseColor,
         lineWidth: 1,
         lineStyle: LightweightCharts.LineStyle.Solid,
         axisLabelVisible: true,
-        title: `💧 ${z.type} [${z.score}] ($${z.bottom.toFixed(2)} - $${z.top.toFixed(2)})`,
+        title: `💧 ${z.type} · ${roleText} [${z.score}] ($${z.bottom.toFixed(2)} - $${z.top.toFixed(2)})`,
       });
     });
   }
@@ -1811,14 +1811,15 @@ function setupToggleListeners() {
     btnReset.addEventListener("click", () => {
       const defaults = {
         htfFvg: true,
-        ltfFvg: false,
-        orderBlocks: true,
-        liquidity: true,
-        hiddenLiquidity: false,
         trendlines: true,
+        liquidity: true,
+        orderBlocks: true,
+        // Secondary / Micro Layers (All unticked by default)
+        volume: false,
+        ltfFvg: false,
         psych: false,
         swings: false,
-        volume: true,
+        hiddenLiquidity: false,
       };
       Object.entries(map).forEach(([elemId, propKey]) => {
         const el = document.getElementById(elemId);

@@ -734,3 +734,15 @@ async def serve_paper_dashboard():
     if os.path.exists(paper_path):
         return FileResponse(paper_path)
     return {"message": "Paper Trading Dashboard building..."}
+
+@app.get("/workstation")
+@app.get("/v2")
+async def serve_workstation_dashboard():
+    """Serve dedicated SMC Workstation V2."""
+    workstation_path = os.path.join(frontend_dir, "smc-workstation-v2.html")
+    if not os.path.exists(workstation_path):
+        workstation_path = os.path.join(frontend_dir, "SMC_Workstation_V2_offline.html")
+    if os.path.exists(workstation_path):
+        return FileResponse(workstation_path)
+    return {"message": "SMC Workstation V2 building..."}
+

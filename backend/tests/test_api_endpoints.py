@@ -103,3 +103,27 @@ def test_api_update_stop(tmp_path, monkeypatch):
     resp_up = client.post(f"/api/paper/positions/{pos_id}/update_stop", json={"new_stop": 4095.0})
     assert resp_up.status_code == 200
     assert resp_up.json()["success"] is True
+
+
+def test_api_frontend_and_workstation_routes():
+    """Verify frontend static/HTML routes serve the index, paper dashboard, and workstation V2."""
+    resp_index = client.get("/")
+    assert resp_index.status_code == 200
+    assert "btnOpenV2" in resp_index.text
+    assert "V2 Workstation" in resp_index.text
+
+    resp_paper = client.get("/paper")
+    assert resp_paper.status_code == 200
+
+    resp_v2 = client.get("/v2")
+    assert resp_v2.status_code == 200
+    assert "SMC Workstation" in resp_v2.text
+
+    resp_ws = client.get("/workstation")
+    assert resp_ws.status_code == 200
+    assert "SMC Workstation" in resp_ws.text
+
+    resp_static_v2 = client.get("/static/smc-workstation-v2.html")
+    assert resp_static_v2.status_code == 200
+    assert "SMC Workstation" in resp_static_v2.text
+

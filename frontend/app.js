@@ -49,7 +49,7 @@ const layers = {
   curLiq: true, // Same-Timeframe Liquidity & Levels (EQH/EQL/OB)
   htfSr: true, // 1D / 1W Key Levels & S/R (PDH/PDL, PWH/PWL)
   setups: true, // Setup targets (Entry, SL, TP1, TP2)
-  volume: true, // Volume sub-chart
+  volume: false, // Volume sub-chart (unchecked by default)
 };
 
 // Alert and audio state

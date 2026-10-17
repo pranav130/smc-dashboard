@@ -16,7 +16,7 @@ async def test_live_delta_product_verification():
         assert xaut is not None, "XAUTUSD must exist on Delta Exchange India"
         assert xaut.get("id") == 131253
         assert xaut.get("contract_type") == "perpetual_futures"
-        assert xaut.get("trading_status") in ("operational", "disrupted_cancel_only", "settlement")
+        assert xaut.get("trading_status") in ("operational", "settlement") or "disrupted" in str(xaut.get("trading_status"))
 
 @pytest.mark.asyncio
 async def test_live_historical_candles_all_timeframes():

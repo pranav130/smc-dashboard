@@ -126,13 +126,15 @@
       width: 36px;
       height: 36px;
       border-radius: 6px;
-      background: var(--am);
-      color: #000;
+      background: linear-gradient(135deg, #f5d061 0%, #d4af37 50%, #9e782f 100%);
+      color: #1a1200;
       font-weight: 800;
       font-size: 16px;
       display: grid;
       place-items: center;
-      box-shadow: 0 0 10px rgba(245, 197, 24, 0.3);
+      box-shadow: 0 0 12px rgba(212, 175, 55, 0.35);
+      border: 1px solid rgba(255, 235, 150, 0.3);
+      text-shadow: 0 1px 0 rgba(255, 255, 255, 0.35);
       flex-shrink: 0;
     }
     .brand b { display: block; font-size: 14px; font-weight: 700; color: var(--tx-b); letter-spacing: -0.2px; }
@@ -631,7 +633,7 @@
 
             <div class="layers-title" style="margin-top:7px;">Execution &amp; Chart</div>
             <label class="layer-item"><input type="checkbox" id="layer-setups" checked> <span class="layer-sw" style="background:var(--up)"></span> Setup Targets (Entry/SL/TP)</label>
-            <label class="layer-item"><input type="checkbox" id="layer-vol" checked> <span class="layer-sw" style="background:#666"></span> Volume Sub-chart</label>
+            <label class="layer-item"><input type="checkbox" id="layer-vol"> <span class="layer-sw" style="background:#666"></span> Volume Sub-chart</label>
             <div style="border-top:1px solid var(--bd); margin:6px 0; padding-top:6px;">
               <label class="layer-item"><input type="checkbox" id="layer-focus"> <span class="layer-sw" style="background:#fff"></span> Focus Mode (Suppress Minor Noise)</label>
             </div>
@@ -766,6 +768,6 @@
 <div id="toastContainer" class="toast-container"></div>
 
 <script src="/static/lightweight-charts.js"></script>
-<script src="/static/app.js?v=4.5"></script>
+<script src="/static/app.js?v=4.6"></script>
 </body>
 </html>

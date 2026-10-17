@@ -41,9 +41,11 @@ MAX_DATA_AGE_SECONDS = 60    # Stale data cutoff (fail-closed if >60s)
 TIMEFRAME_MAP = {
     "1D": "1d",
     "4H": "4h",
+    "2H": "2h",
     "1H": "1h",
     "30M": "30m",
     "15M": "15m",
+    "10M": "10m",
     "5M": "5m",
     "1M": "1m",
 }
@@ -53,9 +55,12 @@ REVERSE_TIMEFRAME_MAP = {v: k for k, v in TIMEFRAME_MAP.items()}
 TIMEFRAME_SECONDS = {
     "1d": 86400,
     "4h": 14400,
+    "2h": 7200,
     "1h": 3600,
     "30m": 1800,
     "15m": 900,
+    "10m": 600,
+    "10M": 600,
     "5M": 300,
     "5m": 300,
     "1m": 60,

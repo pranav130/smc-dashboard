@@ -1,463 +1,771 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>XAUTUSD Terminal · Delta Exchange India | SMC Gold Liquidity Intelligence</title>
-  <link rel="stylesheet" href="/static/styles.css?v=3.6">
-  <script src="/static/lightweight-charts.js"></script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <title>SMC Gold Liquidity Intelligence · XAUTUSD</title>
+  <style>
+    :root {
+      --bg: #05080d;
+      --pn: #0a1018;
+      --pn-sub: #080d14;
+      --bd: #1b2a3a;
+      --tx: #d7e2ee;
+      --tx-b: #ffffff;
+      --mu: #6f8399;
+      --up: #18c37e;
+      --dn: #ff3b4e;
+      --am: #f5c518;
+      --bl: #2f9bff;
+      --purp: #a855f7;
+      --btn-bg: #0d1622;
+      --btn-hover: #132236;
+      --btn-on: #0f2540;
+      --overlay-bg: rgba(5, 8, 13, 0.85);
+      --toast-bg: rgba(13, 22, 34, 0.96);
+      --dropdown-bg: rgba(10, 16, 24, 0.96);
+      --drawer-shadow: -10px 0 30px rgba(0, 0, 0, 0.7);
+      color-scheme: dark;
+    }
+    [data-theme="midnight"] {
+      --bg: #000000;
+      --pn: #09090b;
+      --pn-sub: #040405;
+      --bd: #1e2025;
+      --tx: #e2e8f0;
+      --tx-b: #ffffff;
+      --mu: #71717a;
+      --up: #18c37e;
+      --dn: #ff3b4e;
+      --am: #f5c518;
+      --bl: #2f9bff;
+      --purp: #a855f7;
+      --btn-bg: #121316;
+      --btn-hover: #1a1c22;
+      --btn-on: #1e2330;
+      --overlay-bg: rgba(0, 0, 0, 0.88);
+      --toast-bg: rgba(18, 19, 22, 0.96);
+      --dropdown-bg: rgba(9, 9, 11, 0.98);
+      --drawer-shadow: -10px 0 30px rgba(0, 0, 0, 0.9);
+      color-scheme: dark;
+    }
+    [data-theme="light"] {
+      --bg: #f4f6f9;
+      --pn: #ffffff;
+      --pn-sub: #f8fafc;
+      --bd: #cbd5e1;
+      --tx: #1e293b;
+      --tx-b: #0f172a;
+      --mu: #64748b;
+      --up: #089981;
+      --dn: #f23645;
+      --am: #d97706;
+      --bl: #2563eb;
+      --purp: #9333ea;
+      --btn-bg: #f1f5f9;
+      --btn-hover: #e2e8f0;
+      --btn-on: #dbeafe;
+      --overlay-bg: rgba(244, 246, 249, 0.88);
+      --toast-bg: rgba(255, 255, 255, 0.98);
+      --dropdown-bg: rgba(255, 255, 255, 0.98);
+      --drawer-shadow: -10px 0 30px rgba(0, 0, 0, 0.12);
+      color-scheme: light;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--tx);
+      font: 13px/1.4 "Segoe UI", system-ui, -apple-system, sans-serif;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+    .app {
+      display: grid;
+      grid-template-columns: 270px 1fr 280px;
+      grid-template-rows: auto 1fr auto;
+      gap: 8px;
+      padding: 8px;
+      min-height: 100vh;
+    }
+    .pn {
+      background: var(--pn);
+      border: 1px solid var(--bd);
+      border-radius: 6px;
+      padding: 10px;
+      min-width: 0;
+    }
+    h2 {
+      margin: 0 0 8px;
+      font-size: 11.5px;
+      font-weight: 700;
+      color: var(--mu);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    header {
+      grid-column: 1 / 4;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+    .brand {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex: 1 1 240px;
+    }
+    .logo {
+      width: 36px;
+      height: 36px;
+      border-radius: 6px;
+      background: var(--am);
+      color: #000;
+      font-weight: 800;
+      font-size: 16px;
+      display: grid;
+      place-items: center;
+      box-shadow: 0 0 10px rgba(245, 197, 24, 0.3);
+      flex-shrink: 0;
+    }
+    .brand b { display: block; font-size: 14px; font-weight: 700; color: var(--tx-b); letter-spacing: -0.2px; }
+    .brand small { color: var(--mu); font-size: 11px; }
+    .px { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--tx-b); }
+    .tile {
+      border: 1px solid var(--bd);
+      border-radius: 6px;
+      padding: 4px 10px;
+      min-width: 84px;
+      background: var(--pn-sub);
+    }
+    .tile small { display: block; color: var(--mu); font-size: 10px; text-transform: uppercase; letter-spacing: 0.3px; }
+    .tile span { font-weight: 600; font-variant-numeric: tabular-nums; }
+    .tfs button, .tg {
+      background: var(--btn-bg);
+      color: var(--tx);
+      border: 1px solid var(--bd);
+      border-radius: 4px;
+      padding: 5px 10px;
+      cursor: pointer;
+      font: inherit;
+      font-size: 11px;
+      font-weight: 600;
+      transition: all 0.15s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      text-decoration: none;
+    }
+    .tfs button:hover, .tg:hover {
+      background: var(--btn-hover);
+      border-color: var(--mu);
+      color: var(--tx-b);
+    }
+    .tfs button.on, .tg.on {
+      border-color: var(--bl);
+      background: var(--btn-on);
+      color: var(--tx-b);
+    }
+    .tfs { display: flex; gap: 4px; align-items: center; }
+    .badge {
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-weight: 700;
+      font-size: 10.5px;
+      border: 1px solid;
+      letter-spacing: 0.5px;
+    }
+    .b-ok { color: var(--up); border-color: var(--up); background: rgba(24, 195, 126, 0.1); }
+    .b-bad { color: var(--dn); border-color: var(--dn); background: rgba(255, 59, 78, 0.1); }
+    .b-warn { color: var(--am); border-color: var(--am); background: rgba(245, 197, 24, 0.1); }
+    .col { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+    #chartwrap {
+      position: relative;
+      padding: 0;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      min-height: 380px;
+      height: 520px;
+    }
+    .chart-toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 6px 10px;
+      background: var(--pn);
+      border-bottom: 1px solid var(--bd);
+      font-size: 11px;
+      z-index: 10;
+      flex-shrink: 0;
+    }
+    .chart-legend {
+      display: flex;
+      gap: 12px;
+      font-variant-numeric: tabular-nums;
+      color: var(--mu);
+    }
+    .chart-legend b { color: var(--tx); font-weight: 600; }
+    canvas {
+      flex: 1;
+      width: 100%;
+      min-height: 320px;
+      display: block;
+      cursor: crosshair;
+    }
+    .chart-resizer {
+      height: 14px;
+      background: var(--pn);
+      border-top: 1px solid var(--bd);
+      cursor: row-resize;
+      width: 100%;
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      z-index: 15;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      user-select: none;
+      transition: background 0.15s ease;
+    }
+    .chart-resizer::after {
+      content: '';
+      width: 56px;
+      height: 4px;
+      border-radius: 2px;
+      background: var(--mu);
+      transition: background 0.15s ease, width 0.15s ease;
+    }
+    .chart-resizer:hover, .chart-resizer.dragging {
+      background: rgba(47, 155, 255, 0.2);
+    }
+    .chart-resizer:hover::after, .chart-resizer.dragging::after {
+      background: var(--bl);
+      width: 80px;
+    }
+    #chartwrap:fullscreen, #chartwrap:-webkit-full-screen, #chartwrap.maxed {
+      width: 100vw !important;
+      height: 100vh !important;
+      max-height: 100vh !important;
+      min-height: 100vh !important;
+      background: var(--bg) !important;
+      padding: 0 !important;
+      margin: 0 !important;
+      border: none !important;
+      border-radius: 0 !important;
+      z-index: 999999 !important;
+    }
+    #chartwrap.maxed {
+      position: fixed !important;
+      inset: 0 !important;
+      padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px) !important;
+    }
+    #chartContainer {
+      flex: 1;
+      width: 100%;
+      min-height: 320px;
+      position: relative;
+    }
+    #chartwrap:fullscreen #chartContainer, #chartwrap:-webkit-full-screen #chartContainer, #chartwrap.maxed #chartContainer {
+      height: calc(100vh - 36px) !important;
+      min-height: calc(100vh - 36px) !important;
+    }
+    #chartwrap:fullscreen .chart-resizer, #chartwrap:-webkit-full-screen .chart-resizer, #chartwrap.maxed .chart-resizer {
+      display: none !important;
+    }
+    body.chart-max {
+      overflow: hidden;
+    }
+    #overlay {
+      position: absolute;
+      inset: 0;
+      display: none;
+      place-items: center;
+      text-align: center;
+      background: var(--overlay-bg);
+      padding: 20px;
+      z-index: 20;
+    }
+    #overlay.show { display: grid; }
+    .row {
+      display: flex;
+      justify-content: space-between;
+      padding: 6px 8px;
+      border-left: 3px solid var(--bd);
+      margin-bottom: 3px;
+      background: var(--btn-bg);
+      border-radius: 0 4px 4px 0;
+    }
+    .row b { font-variant-numeric: tabular-nums; }
+    .state {
+      font-size: 18px;
+      font-weight: 800;
+      margin: 2px 0 8px;
+      letter-spacing: 0.3px;
+    }
+    .ck { list-style: none; margin: 0; padding: 0; }
+    .ck li {
+      padding: 4px 0;
+      display: flex;
+      gap: 8px;
+      font-size: 11.5px;
+      border-bottom: 1px dashed rgba(27, 42, 58, 0.6);
+      align-items: center;
+    }
+    .ck .y { color: var(--up); }
+    .ck .n { color: var(--mu); }
+    .tiles {
+      grid-column: 1 / 4;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+      gap: 8px;
+    }
+    .lv {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 4px 0;
+      border-bottom: 1px dashed var(--bd);
+      font-size: 11px;
+    }
+    .lv b { font-variant-numeric: tabular-nums; }
+    .sample { color: var(--am); font-weight: 700; font-size: 10px; margin-left: 4px; }
+    .btn {
+      margin-top: 10px;
+      background: var(--bl);
+      color: #00101f;
+      border: 0;
+      border-radius: 4px;
+      padding: 7px 14px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .btn-exec {
+      width: 100%;
+      margin-top: 8px;
+      background: var(--up);
+      color: #000;
+      border: none;
+      border-radius: 4px;
+      padding: 7px 10px;
+      font-weight: 800;
+      font-size: 11px;
+      cursor: pointer;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: filter 0.15s ease;
+    }
+    .btn-exec:hover { filter: brightness(1.15); }
+    .btn-exec.show { display: flex; }
+    
+    /* Sliding Intelligence Drawer */
+    .drawer-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.6);
+      z-index: 100;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s ease;
+    }
+    .drawer-overlay.open { opacity: 1; pointer-events: auto; }
+    .drawer {
+      position: fixed;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      width: 380px;
+      max-width: 90vw;
+      background: var(--pn);
+      border-left: 1px solid var(--bd);
+      box-shadow: var(--drawer-shadow);
+      z-index: 101;
+      display: flex;
+      flex-direction: column;
+      transform: translateX(100%);
+      transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .drawer.open { transform: translateX(0); }
+    .drawer-head {
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--bd);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: var(--pn-sub);
+    }
+    .drawer-head b { font-size: 13px; color: var(--tx-b); }
+    .drawer-close {
+      background: transparent;
+      border: none;
+      color: var(--mu);
+      font-size: 16px;
+      cursor: pointer;
+      padding: 2px 6px;
+    }
+    .drawer-tabs {
+      display: flex;
+      gap: 4px;
+      padding: 6px 10px;
+      background: var(--pn-sub);
+      border-bottom: 1px solid var(--bd);
+      overflow-x: auto;
+    }
+    .d-tab {
+      background: transparent;
+      border: none;
+      color: var(--mu);
+      font-size: 11px;
+      font-weight: 600;
+      padding: 5px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .d-tab.on { background: var(--btn-on); color: var(--bl); font-weight: 700; }
+    .drawer-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .card-sm {
+      background: var(--btn-bg);
+      border: 1px solid var(--bd);
+      border-radius: 5px;
+      padding: 8px 10px;
+    }
+    .card-sm b { font-size: 11.5px; color: var(--tx-b); }
+    .card-sm p { margin: 4px 0 0; color: var(--mu); font-size: 11px; line-height: 1.35; }
+    .tag-pill {
+      font-size: 9.5px;
+      font-weight: 700;
+      padding: 1px 5px;
+      border-radius: 3px;
+      display: inline-block;
+    }
+
+    /* Layers Dropdown */
+    .layers-dropdown {
+      position: absolute;
+      top: calc(100% + 5px);
+      left: 0;
+      background: var(--dropdown-bg);
+      border: 1px solid var(--bd);
+      border-radius: 6px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+      padding: 8px 10px;
+      z-index: 100;
+      min-width: 220px;
+      backdrop-filter: blur(8px);
+    }
+    .layers-title {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      color: var(--mu);
+      letter-spacing: 0.5px;
+      margin-bottom: 6px;
+    }
+    .layer-item {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 11px;
+      color: var(--tx);
+      cursor: pointer;
+      padding: 3px 0;
+      user-select: none;
+    }
+    .layer-item:hover { color: var(--tx-b); }
+    .layer-sw {
+      width: 8px;
+      height: 8px;
+      border-radius: 2px;
+      display: inline-block;
+      flex-shrink: 0;
+    }
+
+    /* Toast Notifications */
+    .toast-container {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      flex-direction: column-reverse;
+      gap: 8px;
+      z-index: 99999;
+      pointer-events: none;
+    }
+    .toast-msg {
+      background: var(--toast-bg);
+      border: 1px solid var(--bd);
+      border-radius: 6px;
+      box-shadow: 0 8px 26px rgba(0, 0, 0, 0.4);
+      padding: 8px 14px;
+      font-size: 12px;
+      color: var(--tx-b);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      pointer-events: auto;
+      animation: toastIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+      transition: opacity 0.3s ease, transform 0.3s ease;
+      backdrop-filter: blur(10px);
+    }
+    @keyframes toastIn {
+      from { opacity: 0; transform: translateY(12px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .toast-msg.toast-out {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    .toast-msg.t-ok { border-left: 3px solid var(--up); }
+    .toast-msg.t-warn { border-left: 3px solid var(--am); }
+    .toast-msg.t-bad { border-left: 3px solid var(--dn); }
+
+    @media(max-width: 1000px) {
+      .app { grid-template-columns: 1fr; }
+      header, .tiles { grid-column: 1; }
+    }
+  </style>
 </head>
 <body>
 
-  <!-- 1. COMPACT INSTITUTIONAL HEADER -->
-  <header class="terminal-header">
-    <div class="header-left">
-      <div class="instrument-brand">
-        <span class="brand-badge">DELTA IN</span>
-        <span class="symbol-name">XAUTUSD</span>
-        <span class="badge-contract" id="headerBadge" title="Tether Gold Token Perpetual Future (Product ID 131253) · Ref Spot: .DEXAUTUSD">Perp · ID 131253</span>
-        <span class="badge-basis" id="headerBasisBadge" title="Basis vs .DEXAUTUSD Spot Index">Basis: --</span>
-      </div>
-      <div class="price-pill">
-        <span class="live-price" id="headerPrice">--.--</span>
-        <span class="currency-tag">USD</span>
-      </div>
-      <div class="source-clock" id="headerSourceTime" title="Exchange Source Timestamp">
-        --:--:-- IST
+<div class="app">
+  <!-- HEADER -->
+  <header class="pn">
+    <div class="brand">
+      <div class="logo">Au</div>
+      <div>
+        <b>SMC Gold Liquidity Intelligence</b>
+        <small>XAUTUSD · Delta Exchange India</small>
       </div>
     </div>
 
-    <!-- Center: Timeframe Selector (with clear workflow hierarchy indicators) -->
-    <div class="header-center">
-      <div class="timeframe-group">
-        <button class="tf-btn" data-tf="1D" title="Daily: Major Market Context">1D <span class="tf-role">Context</span></button>
-        <button class="tf-btn" data-tf="4H" title="4H: Primary Key-Level Identification">4H <span class="tf-role">Key</span></button>
-        <button class="tf-btn active" data-tf="1H" title="1H: Intermediate Structure & Trendlines">1H <span class="tf-role">Struct</span></button>
-        <button class="tf-btn" data-tf="30M" title="30M: Primary Setup & Execution Analysis">30M <span class="tf-role">Setup</span></button>
-        <button class="tf-btn" data-tf="15M" title="15M: Detailed Confirmation">15M</button>
-        <button class="tf-btn" data-tf="5M" title="5M: Micro Confirmation">5M</button>
-        <button class="tf-btn" data-tf="1M" title="1M: Micro Scalp">1M</button>
-      </div>
-    </div>
+    <div class="tile"><small>Last</small><span class="px" id="px">—</span></div>
+    <div class="tile"><small>Change</small><span id="chg">—</span></div>
+    <div class="tile"><small>High</small><span id="hi">—</span></div>
+    <div class="tile"><small>Low</small><span id="lo">—</span></div>
+    <div class="tile"><small>Basis</small><span id="basis" style="font-size: 11px; font-weight: 600;">Spot Index</span></div>
 
-    <div class="header-right">
-      <div id="connectionPill" class="conn-pill Connected" title="Real-time Feed Status">
-        <span class="pulse-dot"></span>
-        <span id="connStatusText">LIVE</span>
-      </div>
-      <a href="/paper" class="btn-paper-nav" id="btnOpenPaper" target="_blank" rel="noopener" title="Open Dedicated 24/7 Paper Trading Dashboard in a new tab">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
-        <span>Paper Trading ↗</span>
-      </a>
-      <a href="/static/smc-workstation-v2.html" class="btn-paper-nav" id="btnOpenV2" target="_blank" rel="noopener"
-         title="Open the SMC Workstation V2 preview (key-level watchlist, setups, backtest) in a new tab"
-         style="background:rgba(76,141,255,0.16);border-color:rgba(76,141,255,0.6);color:#6ea2ff;box-shadow:0 0 10px rgba(76,141,255,0.18);">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="3" width="18" height="18" rx="2"/><polyline points="7 15 10 11 13 13 17 8"/></svg>
-        <span>V2 Workstation ↗</span>
-      </a>
-      <button class="btn-tool" id="btnToggleDetails" title="Toggle Instrument Metadata & Feed Diagnostics">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-        <span id="detailsBtnText">Details ▾</span>
-      </button>
-      <button class="btn-tool" id="btnThemeToggle" title="Toggle Light / Dark Theme">
-        <svg id="themeIconSun" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none;"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
-        <svg id="themeIconMoon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
-        <span id="themeToggleText">Light</span>
-      </button>
-      <button class="btn-tool btn-sync" id="btnRefresh" title="Resync Historical Candles from Delta Exchange India">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
-        Sync
-      </button>
+    <div class="tfs" id="tfs"></div>
+    <button class="tg" id="focus" title="Presentation only; suppresses secondary micro levels">Focus mode</button>
+    <button class="tg" id="btnHeaderFullscreen" title="Toggle Fullscreen (or press 'F')">⛶ Fullscreen</button>
+
+    <a href="/paper" id="btnOpenPaper" target="_blank" class="tg" style="color: var(--up); border-color: rgba(24, 195, 126, 0.4); text-decoration: none;">
+      Paper Trading ↗
+    </a>
+    <a href="https://smc-dashboard-8mtf.onrender.com/static/smc-workstation-v2.html" id="btnOpenV2" target="_blank" rel="noopener noreferrer" class="tg" style="color: var(--bl); border-color: rgba(47, 155, 255, 0.4); text-decoration: none;" title="Open V2 Workstation on Render">
+      V2 Workstation ↗
+    </a>
+    <a href="https://smc-dashboard-8mtf.onrender.com/paper" id="btnOpenRenderPaper" target="_blank" rel="noopener noreferrer" class="tg" style="color: var(--am); border-color: rgba(245, 197, 24, 0.4); text-decoration: none;" title="Open Live Paper Trading on Render">
+      Live Paper ↗
+    </a>
+    <button class="tg" id="btnHub" title="Open Deep Surveillance Watchlist & Radar">Intelligence Hub ▾</button>
+    <button class="tg" id="btnAlerts" title="Notifications & Live Alerts">🔔 Alerts <span class="badge b-warn" id="alertBadge" style="display:none; padding:1px 5px; font-size:9.5px; margin-left:3px;">0</span></button>
+    <button class="tg" id="btnTheme" title="Toggle Theme (Dark / Midnight / Light)"><span id="themeIcon">🌙</span> <span id="themeText">Dark</span></button>
+    <button class="tg" id="btnSync" title="Sync Market Data">Sync</button>
+
+    <div style="display:flex; flex-direction:column; gap:2px; align-items:flex-end; margin-left:auto;">
+      <span class="badge b-warn" id="conn">CONNECTING</span>
+      <small id="upd" style="color:var(--mu); font-size:10px;">no update yet</small>
     </div>
   </header>
 
-  <!-- 2. COLLAPSIBLE DETAILS SECTION (Hidden by default to maximize chart screen) -->
-  <section class="collapsible-details" id="collapsibleDetails" style="display: none;">
-    <div class="details-grid">
-      <div class="detail-cell">
-        <span class="detail-label">Instrument</span>
-        <span class="detail-val" id="statInstrument">Tether Gold Perpetual Futures (XAUTUSD)</span>
-      </div>
-      <div class="detail-cell">
-        <span class="detail-label">Product ID & Specs</span>
-        <span class="detail-val" id="statContract">Delta IN 131253 · 0.001 XAUT/contract · Tick 0.01</span>
-      </div>
-      <div class="detail-cell">
-        <span class="detail-label">Spot Reference</span>
-        <span class="detail-val" id="statSpotRef">Tether Gold Spot Index (.DEXAUTUSD · ID 435)</span>
-      </div>
-      <div class="detail-cell">
-        <span class="detail-label">Basis vs Spot</span>
-        <span class="detail-val" id="statBasis">0.00%</span>
-      </div>
-      <div class="detail-cell">
-        <span class="detail-label">Exchange Feed</span>
-        <span class="detail-val" id="statProvider">Delta Exchange India</span>
-      </div>
-      <div class="detail-cell">
-        <span class="detail-label">Timeframe</span>
-        <span class="detail-val" id="statTimeframe">1H</span>
-      </div>
-      <div class="detail-cell">
-        <span class="detail-label">Last Candle IST</span>
-        <span class="detail-val" id="statLastCandle">--</span>
-      </div>
-      <div class="detail-cell">
-        <span class="detail-label">Candle State</span>
-        <span class="detail-val confirmed-badge" id="statCandleState">Confirmed</span>
-      </div>
-      <div class="detail-cell">
-        <span class="detail-label">Stream Mode</span>
-        <span class="detail-val stream-mode-val" id="statStreamMode">WebSocket Stream</span>
-      </div>
-      <div class="detail-cell">
-        <span class="detail-label">Last Engine Update</span>
-        <span class="detail-val" id="statLastUpdate">--</span>
-      </div>
+  <!-- LEFT COLUMN -->
+  <aside class="col">
+    <div class="pn">
+      <h2>Higher-timeframe bias</h2>
+      <div id="mtf"><div class="lv"><span style="color:var(--mu)">Loading multi-TF bias...</span></div></div>
     </div>
-  </section>
-
-  <!-- 3. SIGNAL SUMMARY BAR (1-2 Second Institutional Scanability) -->
-  <section class="signal-summary-bar">
-    <!-- Region 1: Market Bias -->
-    <div class="summary-region bias-region">
-      <div class="bias-pill" id="marketBiasPill">BIAS: NEUTRAL</div>
-      <div class="tf-bias-group" id="tfBiasIndicators">
-        <span class="tf-badge" data-tf="1D">1D: --</span>
-        <span class="tf-badge" data-tf="4H">4H: --</span>
-        <span class="tf-badge" data-tf="1H">1H: --</span>
-        <span class="tf-badge" data-tf="15M">15M: --</span>
-      </div>
+    <div class="pn" style="flex: 1; overflow-y: auto;">
+      <h2>
+        Liquidity levels
+        <span id="liq-cnt" style="font-size:10px; font-weight:normal; color:var(--mu);">0 levels</span>
+      </h2>
+      <div id="liq"><div class="lv"><span style="color:var(--mu)">Scanning liquidity pools...</span></div></div>
     </div>
+  </aside>
 
-    <div class="summary-divider"></div>
-
-    <!-- Region 2: Setup State -->
-    <div class="summary-region setup-region">
-      <div class="setup-pill idle" id="terminalSetupPill">SETUP: IDLE</div>
-      <div class="summary-meta" id="terminalSetupDesc">No qualifying setup under active surveillance</div>
-    </div>
-
-    <div class="summary-divider"></div>
-
-    <!-- Region 3: Risk & Data Health -->
-    <div class="summary-region risk-region">
-      <div class="risk-pill normal" id="terminalRiskPill">RISK: NORMAL</div>
-      <div class="summary-meta" id="terminalRiskDesc">Live verified market data</div>
-    </div>
-  </section>
-
-  <!-- Warning Banner for stale/delayed feed or opposing HTF zones -->
-  <div class="warning-banner" id="warningBanner" style="display: none;">
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-    <span id="warningText">Notice: Market condition warning.</span>
-  </div>
-
-  <!-- 4. ACTIVE SETUP CARD (Shown prominently when ACTIVE, EXTREME, or actionable WATCH; quiet single-line status when IDLE) -->
-  <section class="active-setup-container" id="activeSetupContainer">
-    <div class="active-setup-card idle-card" id="activeSetupCard">
-      <div class="idle-message">
-        <span class="idle-indicator"></span>
-        <span id="idleText">Market surveillance idle — monitoring SMC structural key levels for qualified trade setups</span>
+  <!-- CENTER CHART -->
+  <main class="pn" id="chartwrap">
+    <div class="chart-toolbar">
+      <div class="chart-legend" id="legend">
+        <span>O: <b id="leg-o">—</b></span>
+        <span>H: <b id="leg-h">—</b></span>
+        <span>L: <b id="leg-l">—</b></span>
+        <span>C: <b id="leg-c">—</b></span>
+        <span>Vol: <b id="leg-v">—</b></span>
       </div>
-    </div>
-  </section>
-
-  <!-- 5. MAIN WORKSPACE: LARGE CHART + PROMINENT GOLD LIQUIDITY INTELLIGENCE HUB -->
-  <div class="main-workspace" id="mainWorkspace">
-    
-    <!-- Primary Chart Panel -->
-    <main class="chart-panel" id="chartPanel">
-      <!-- Chart Toolbar -->
-      <div class="chart-toolbar-bar">
-        <div class="toolbar-left">
-          <!-- Overlays Dropdown Button -->
-          <div class="dropdown-wrapper">
-            <button class="btn-dropdown" id="btnOverlaysMenu" title="Configure Chart Overlays">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
-              <span>Overlays ▾</span>
-            </button>
-            <div class="dropdown-popover" id="overlaysPopover" style="display: none;">
-              <div class="popover-title">High-Value Overlays (Defaults)</div>
-              <label class="toggle-pill highlight-pill" title="Focus strictly on 4H and Daily important key levels, suppressing all secondary layers">
-                <input type="checkbox" id="togFocusSetup"> <span class="dot focus-dot"></span> 4H & Daily Focus Mode
-              </label>
-              <label class="toggle-pill" title="Higher Timeframe Fair Value Gaps (Daily & 4H) — Peacock Green: Bullish | Orange: Bearish">
-                <input type="checkbox" id="togHtfFvg" checked> <span class="dot htf-fvg"></span> HTF FVGs (1D/4H)
-              </label>
-              <label class="toggle-pill" title="Multi-touch Validated Trendlines (1H / 30M) — Green: Support | Red: Resistance">
-                <input type="checkbox" id="togTrendlines" checked> <span class="dot tl"></span> Trendlines (1H/30M)
-              </label>
-              <label class="toggle-pill" title="Previous Day/Week High & Low + Equal Highs/Lows — Green: Buying | Red: Selling">
-                <input type="checkbox" id="togLiquidity" checked> <span class="dot liq"></span> Key Liquidity (PDH/PDL/EQ)
-              </label>
-              <label class="toggle-pill" title="Strict ICT Order Blocks">
-                <input type="checkbox" id="togOrderBlocks" checked> <span class="dot ob"></span> Order Blocks
-              </label>
-              <div class="popover-title" style="margin-top: 6px;">Secondary / Micro Layers</div>
-              <label class="toggle-pill" title="Toggle Volume Histogram on/off">
-                <input type="checkbox" id="togVolume"> <span class="dot vol"></span> Volume Histogram
-              </label>
-              <label class="toggle-pill" title="Current Timeframe Fair Value Gaps">
-                <input type="checkbox" id="togLtfFvg"> <span class="dot ltf-fvg"></span> Current TF FVGs
-              </label>
-              <label class="toggle-pill" title="Institutional Psychological 20s and 80s Levels">
-                <input type="checkbox" id="togPsych"> <span class="dot psych"></span> 20/80 Levels
-              </label>
-              <label class="toggle-pill" title="Swing Structure and Valid Break of Structure (>=40%)">
-                <input type="checkbox" id="togSwings"> <span class="dot swings"></span> Swings & BoS
-              </label>
-              <label class="toggle-pill highlight-pill" title="Hidden Liquidity Intelligence (BSL / SSL Zones & Multi-TF Pools)">
-                <input type="checkbox" id="togHiddenLiquidity"> <span class="dot" style="background: #a855f7;"></span> Hidden Liquidity Pools
-              </label>
-              <div style="margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--border-subtle); display: flex; gap: 6px;">
-                <button type="button" id="btnClearOverlays" style="flex: 1; padding: 4px 6px; font-size: 10px; font-weight: 600; background: rgba(242,54,69,0.12); border: 1px solid rgba(242,54,69,0.3); color: var(--red-bear); border-radius: 4px; cursor: pointer;">Clean Candles</button>
-                <button type="button" id="btnResetOverlays" style="flex: 1; padding: 4px 6px; font-size: 10px; font-weight: 600; background: rgba(255,255,255,0.06); border: 1px solid var(--border); color: var(--text-muted); border-radius: 4px; cursor: pointer;">Defaults</button>
-              </div>
-            </div>
-          </div>
-
-          <!-- Focus Setup Quick Action Button -->
-          <button class="btn-focus-setup" id="btnFocusSetup" title="Toggle Focus Mode: Display strictly 4H and Daily key levels only">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/><line x1="12" y1="2" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="2" y1="12" x2="5" y2="12"/><line x1="19" y1="12" x2="22" y2="12"/></svg>
-            <span id="focusSetupBtnText">HTF Focus: OFF</span>
-          </button>
-        </div>
-
-        <div class="toolbar-right">
-          <!-- Toggle Intelligence Hub (Open / Close) -->
-          <button class="btn-toggle-hub active" id="btnToggleHub" title="Toggle Gold Liquidity Intelligence Sidebar">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="15" y1="3" x2="15" y2="21"/></svg>
-            <span id="toggleHubText">Intelligence Hub</span>
-          </button>
-
-          <button class="btn-fullscreen" id="btnFullscreen" title="Toggle Full Screen (or press 'F')">
-            <svg id="fsIconExpand" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
-            <svg id="fsIconCompress" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display: none;"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/></svg>
-            <span id="fsBtnText">Full Screen</span>
-          </button>
-        </div>
-      </div>
-
-      <!-- Chart Container with Floating Legend -->
-      <div class="chart-container">
-        <div class="chart-overlay-legend">
-          <div class="legend-header-row">
-            <span class="legend-title" id="legendTitle">XAUTUSD · 1H · DELTA INDIA</span>
-            <span class="legend-ohlc" id="legendOHLC">O: -- H: -- L: -- C: -- V: --</span>
-          </div>
-        </div>
-        <div id="chart"></div>
-      </div>
-    </main>
-
-    <!-- 6. PROMINENT GOLD LIQUIDITY INTELLIGENCE HUB (Directly visible on main screen) -->
-    <aside class="intelligence-hub" id="intelligenceHub">
-      <!-- Hub Top Navigation Tabs -->
-      <div class="hub-header">
-        <div class="hub-tabs">
-          <button class="hub-tab-btn active" data-tab="tab-watchlist" title="Key-Level Activation Watchlist">
-            <span>Watchlist</span>
-            <span class="hub-badge" id="hubWlBadge">0</span>
-          </button>
-          <button class="hub-tab-btn" data-tab="tab-events" title="Recent Structural Events Feed">
-            <span>Recent Events</span>
-            <span class="hub-badge live-pulse" id="hubEventsBadge">0</span>
-          </button>
-          <button class="hub-tab-btn" data-tab="tab-radar" title="Hidden Liquidity Radar">
-            <span>Radar</span>
-            <span class="hub-badge" id="hubRadarBadge">0</span>
-          </button>
-          <button class="hub-tab-btn" data-tab="tab-levels" title="SMC Levels & Order Blocks">
-            <span>Levels</span>
-          </button>
-          <button class="hub-tab-btn" data-tab="tab-playbook" title="SMC Strategy Playbook">
-            <span>Playbook</span>
-          </button>
-        </div>
-        <button class="hub-close-btn" id="btnCloseHub" title="Collapse intelligence sidebar">✕</button>
-      </div>
-
-      <!-- Hub Content Panes -->
-      <div class="hub-body">
+      <div style="display:flex; gap:6px; align-items:center;">
+        <span id="chart-hint" style="color:var(--mu); font-size:10px;">Drag axis to scale · Scroll to zoom</span>
         
-        <!-- PANE 1: KEY-LEVEL ACTIVATION WATCHLIST (Phase 5 Core Feature) -->
-        <div class="hub-tab-pane active" id="tab-watchlist">
-          <div class="watchlist-filter-bar">
-            <button class="wl-filter-chip active" data-filter="all">All (<span id="filterAllCount">0</span>)</button>
-            <button class="wl-filter-chip" data-filter="above">Above Price (<span id="filterAboveCount">0</span>)</button>
-            <button class="wl-filter-chip" data-filter="below">Below Price (<span id="filterBelowCount">0</span>)</button>
-            <button class="wl-filter-chip" data-filter="high">High Priority (<span id="filterHighCount">0</span>)</button>
-            <button class="wl-filter-chip" data-filter="active">Approaching/Active (<span id="filterActiveCount">0</span>)</button>
-          </div>
+        <div style="position:relative;">
+          <button class="tg" id="btnLayers" title="Toggle overlay layers" style="padding: 2px 8px; font-size: 10.5px; display: inline-flex; align-items: center; gap: 4px;">
+            <span>Layers</span> ▾
+          </button>
+          <div id="layersDropdown" class="layers-dropdown" style="display:none;">
+            <div class="layers-title">Higher-Timeframe Overlays</div>
+            <label class="layer-item"><input type="checkbox" id="layer-htf-fvg" checked> <span class="layer-sw" style="background:var(--bl)"></span> 4H / 1D Fair Value Gaps</label>
+            <label class="layer-item"><input type="checkbox" id="layer-htf-sr" checked> <span class="layer-sw" style="background:var(--purp)"></span> 1D / 1W Key Levels &amp; S/R</label>
 
-          <div class="hub-cards-scroll" id="watchlistCardsContainer">
-            <div class="empty-state">Scanning key levels for qualified activation states...</div>
-          </div>
-        </div>
+            <div class="layers-title" style="margin-top:7px;">Current Timeframe (<span id="layerCurTf">1H</span>)</div>
+            <label class="layer-item"><input type="checkbox" id="layer-cur-fvg" checked> <span class="layer-sw" style="background:#22d3ee"></span> Same-TF FVGs</label>
+            <label class="layer-item"><input type="checkbox" id="layer-cur-liq" checked> <span class="layer-sw" style="background:var(--am)"></span> Same-TF Liquidity &amp; Levels</label>
 
-        <!-- PANE 2: RECENT STRUCTURAL EVENTS (Phase 6 Core Feature) -->
-        <div class="hub-tab-pane" id="tab-events" style="display: none;">
-          <div class="feed-header-info">
-            <span class="feed-title">Structural Detections</span>
-            <span class="feed-sub">Sweeps · 1H/30M Trendlines · Displacements</span>
-          </div>
-          <div class="events-feed-scroll" id="recentEventsContainer">
-            <div class="empty-state">No recent structural events detected in this session.</div>
-          </div>
-        </div>
-
-        <!-- PANE 3: LIQUIDITY RADAR (Hidden Liquidity & Confluence Targets) -->
-        <div class="hub-tab-pane" id="tab-radar" style="display: none;">
-          <div class="drawer-card" style="margin-bottom: 10px;">
-            <div class="card-header">
-              <span class="card-title">Liquidity Radar</span>
-              <span class="badge-count" id="liqRadarZoneCount">0 Zones</span>
-            </div>
-            <div class="card-body" style="padding: 8px;">
-              <div id="liqRadarOverview" style="display: flex; flex-direction: column; gap: 6px;">
-                <div class="radar-box" id="radarTargetAbove">
-                  <div class="radar-label">Target Above (BSL)</div>
-                  <div class="radar-val" id="radarTargetAboveVal">Scanning...</div>
-                </div>
-                <div class="radar-box" id="radarTargetBelow">
-                  <div class="radar-label">Target Below (SSL)</div>
-                  <div class="radar-val" id="radarTargetBelowVal">Scanning...</div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div class="watchlist-filter-bar" style="margin-bottom: 8px;">
-            <button class="wl-filter-chip active" data-liq-filter="all">All</button>
-            <button class="wl-filter-chip" data-liq-filter="bsl">BSL (Buy-Side)</button>
-            <button class="wl-filter-chip" data-liq-filter="ssl">SSL (Sell-Side)</button>
-            <button class="wl-filter-chip" data-liq-filter="swept">Sweeps</button>
-          </div>
-
-          <div id="liquidityZonesContainer" style="display: flex; flex-direction: column; gap: 6px;">
-            <div class="empty-state">Scanning market structure for hidden liquidity zones...</div>
-          </div>
-
-          <div id="liqZoneDetailsCard" class="drawer-card" style="margin-top: 10px; display: none; border-color: #a855f7;">
-            <div class="card-header" style="background: rgba(168, 85, 247, 0.1);">
-              <span class="card-title" id="liqDetailTitle">Zone Details</span>
-              <button class="btn-tool" id="btnCloseLiqDetail" style="padding: 2px 6px;">✕</button>
-            </div>
-            <div class="card-body" id="liqDetailBody" style="padding: 8px; font-size: 11px; line-height: 1.4;"></div>
-          </div>
-        </div>
-
-        <!-- PANE 4: KEY LEVELS & ORDER BLOCKS -->
-        <div class="hub-tab-pane" id="tab-levels" style="display: none;">
-          <div class="drawer-card">
-            <div class="card-header">
-              <span class="card-title">Prioritized Key Levels</span>
-              <span class="badge-count" id="levelsCount">0</span>
-            </div>
-            <div class="card-body" style="padding: 0;">
-              <table class="levels-table">
-                <thead>
-                  <tr>
-                    <th>Level / POI</th>
-                    <th>Price</th>
-                    <th>Dist</th>
-                    <th>Priority</th>
-                  </tr>
-                </thead>
-                <tbody id="levelsTableBody">
-                  <tr><td colspan="4" class="empty-state">Loading levels...</td></tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <div class="drawer-card" style="margin-top: 10px;">
-            <div class="card-header">
-              <span class="card-title">Active Order Blocks</span>
-              <span class="badge-count" id="obCount">0</span>
-            </div>
-            <div class="card-body" id="obBody">
-              <div class="empty-state">Scanning for confirmed order blocks...</div>
-            </div>
-          </div>
-
-          <div class="drawer-card" style="margin-top: 10px;">
-            <div class="card-header">
-              <span class="card-title">Overlapping HTF Critical Sections</span>
-              <span class="badge-count" id="overlapsCount">0</span>
-            </div>
-            <div class="card-body" id="overlapsBody">
-              <div class="empty-state">Scanning for overlapping Daily & 4H FVGs...</div>
-            </div>
-          </div>
-
-          <div class="drawer-card" style="margin-top: 10px;">
-            <div class="card-header">
-              <span class="card-title">Psychological Round Numbers (20s & 80s)</span>
-            </div>
-            <div class="card-body" style="padding: 0;">
-              <table class="levels-table">
-                <thead>
-                  <tr>
-                    <th>Level</th>
-                    <th>Price</th>
-                    <th>Distance</th>
-                  </tr>
-                </thead>
-                <tbody id="psychTableBody"></tbody>
-              </table>
+            <div class="layers-title" style="margin-top:7px;">Execution &amp; Chart</div>
+            <label class="layer-item"><input type="checkbox" id="layer-setups" checked> <span class="layer-sw" style="background:var(--up)"></span> Setup Targets (Entry/SL/TP)</label>
+            <label class="layer-item"><input type="checkbox" id="layer-vol" checked> <span class="layer-sw" style="background:#666"></span> Volume Sub-chart</label>
+            <div style="border-top:1px solid var(--bd); margin:6px 0; padding-top:6px;">
+              <label class="layer-item"><input type="checkbox" id="layer-focus"> <span class="layer-sw" style="background:#fff"></span> Focus Mode (Suppress Minor Noise)</label>
             </div>
           </div>
         </div>
 
-        <!-- PANE 5: STRATEGY PLAYBOOK & METHODOLOGY -->
-        <div class="hub-tab-pane" id="tab-playbook" style="display: none;">
-          <div class="poi-callout">
-            <strong>Timeframe Hierarchy:</strong>
-            <p>• <strong>Daily</strong>: Major market context & bias.<br>
-               • <strong>4H</strong>: Primary key-level identification (FVGs, swings, major S/R).<br>
-               • <strong>1H</strong>: Intermediate structure & multi-touch trendlines.<br>
-               • <strong>30M</strong>: Primary setup & execution-analysis timeframe.</p>
-          </div>
-          <div class="poi-callout">
-            <strong>Core Entry Sequence:</strong>
-            <p>1. Daily/4H FVG or significant level reached.<br>
-               2. Price approaches or reacts (liquidity sweep or rejection wick).<br>
-               3. 1H/30M trendline breakout or breakdown (prefer HL before bullish / LH before bearish break).<br>
-               4. Displacement candle & supporting FVG confirmation.<br>
-               5. Independent trader decision based on manual checklist review.</p>
-          </div>
-          <div class="poi-callout">
-            <strong>Structure Rules:</strong>
-            <p>• BoS is valid <strong>ONLY when there is &ge; 40% retracement</strong>.<br>
-               • Confirm BoS on <strong>30-minute timeframe or higher</strong>.<br>
-               • Avoid trades when an opposing HTF FVG directly obstructs movement.<br>
-               • Trail Stop Loss using 30M FVGs.</p>
-          </div>
-          <div class="poi-callout" style="border-left-color: var(--blue);">
-            <strong>Analysis Support Notice:</strong>
-            <p>This dashboard is a market-attention and key-level intelligence tool. It identifies where to focus attention; it does not issue automated trade execution signals.</p>
-          </div>
-        </div>
-
+        <button class="tg" id="btnHeightToggle" title="Cycle Chart Height" style="padding: 2px 7px; font-size: 10.5px; display: inline-flex; align-items: center; gap: 3px;">
+          ↕ <span id="heightText">520px</span>
+        </button>
+        <button class="tg" id="btnFullscreen" title="Toggle Fullscreen (or press 'F')" style="padding: 2px 8px; font-size: 10.5px; display: inline-flex; align-items: center; gap: 4px;">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+          <span id="fsText">Full Screen</span>
+        </button>
       </div>
-    </aside>
+    </div>
+    <div id="chartContainer"></div>
+    <canvas id="cv" style="display:none;"></canvas>
+    <div class="chart-resizer" id="chartResizer" title="Drag up or down to resize chart height"></div>
+    <div id="overlay">
+      <div>
+        <div id="ovt" style="font-size:16px; font-weight:700">Connecting to Delta Exchange Feed...</div>
+        <div id="ovs" style="color:var(--mu); margin:6px 0 12px">Awaiting initial market candles.</div>
+        <button class="btn" id="demo">Load labelled sample data</button>
+      </div>
+    </div>
+  </main>
 
+  <!-- RIGHT COLUMN -->
+  <aside class="col">
+    <div class="pn">
+      <h2>Setup status <span class="sample" id="smp"></span></h2>
+      <div class="state" id="st">WAIT &amp; WATCH</div>
+      <div class="row" style="border-color:var(--bl)"><span>Direction</span><b id="dir">—</b></div>
+      <div class="row" style="border-color:var(--am)"><span>Entry</span><b id="en">—</b></div>
+      <div class="row" style="border-color:var(--dn)"><span>Stop-loss</span><b id="sl">—</b></div>
+      <div class="row" style="border-color:var(--up)"><span>Target 1</span><b id="t1">—</b></div>
+      <div class="row" style="border-color:var(--up)"><span>Target 2</span><b id="t2">—</b></div>
+      <div class="row"><span>Risk : reward</span><b id="rr">—</b></div>
+      <button class="btn-exec" id="btnPaperTrade">⚡ Execute Paper Trade</button>
+    </div>
+    <div class="pn" style="flex: 1; overflow-y: auto;">
+      <h2>Confirmation checklist</h2>
+      <ul class="ck" id="ck"><li class="n">Scanning confluence conditions...</li></ul>
+    </div>
+    <div class="pn" style="font-size:11px; padding: 8px 10px;">
+      <h2>Feed &amp; Latency Health</h2>
+      <div style="display:flex; justify-content:space-between; margin-bottom:3px;">
+        <span style="color:var(--mu)">Data Provider</span><b style="color:var(--tx-b)">Delta Exchange IN</b>
+      </div>
+      <div style="display:flex; justify-content:space-between; margin-bottom:3px;">
+        <span style="color:var(--mu)">Candle State</span><b id="stat-state" style="color:var(--up)">Confirmed</b>
+      </div>
+      <div style="display:flex; justify-content:space-between;">
+        <span style="color:var(--mu)">Risk Boundary</span><b id="stat-risk" style="color:var(--up)">Normal</b>
+      </div>
+    </div>
+  </aside>
+
+  <!-- BOTTOM TILES -->
+  <section class="tiles">
+    <div class="pn"><h2>Structure</h2><b id="t-str">—</b></div>
+    <div class="pn"><h2>Retracement</h2><b id="t-ret">—</b></div>
+    <div class="pn"><h2>Nearest support</h2><b id="t-sup" style="color:var(--up)">—</b></div>
+    <div class="pn"><h2>Nearest resistance</h2><b id="t-res" style="color:var(--dn)">—</b></div>
+    <div class="pn"><h2>Setup expiry / invalidation</h2><b id="t-exp">—</b></div>
+  </section>
+</div>
+
+<!-- SLIDE DRAWER (Intelligence Hub: Watchlist, Radar, Events) -->
+<div class="drawer-overlay" id="drawerOverlay"></div>
+<aside class="drawer" id="drawer">
+  <div class="drawer-head">
+    <b>Intelligence Hub · Surveillance Deep Dive</b>
+    <button class="drawer-close" id="btnCloseDrawer">✕</button>
   </div>
+  <div class="drawer-tabs">
+    <button class="d-tab on" data-pane="pane-wl">Watchlist</button>
+    <button class="d-tab" data-pane="pane-alerts">Live Alerts <span class="badge b-warn" id="drawerAlertBadge" style="display:none; padding:1px 5px; font-size:9px; margin-left:2px;">0</span></button>
+    <button class="d-tab" data-pane="pane-radar">Liquidity Radar</button>
+    <button class="d-tab" data-pane="pane-events">Structural Events</button>
+  </div>
+  <div class="drawer-body">
+    <!-- Watchlist Pane -->
+    <div id="pane-wl" class="d-pane" style="display: flex; flex-direction: column; gap: 8px;">
+      <div style="display:flex; gap:4px; flex-wrap:wrap; margin-bottom:4px;">
+        <button class="tg on" style="padding:2px 8px; font-size:10px;" id="filterAll">All</button>
+        <button class="tg" style="padding:2px 8px; font-size:10px;" id="filterAbove">Above Price</button>
+        <button class="tg" style="padding:2px 8px; font-size:10px;" id="filterBelow">Below Price</button>
+        <button class="tg" style="padding:2px 8px; font-size:10px;" id="filterHigh">High Priority</button>
+      </div>
+      <div id="wl-items" style="display:flex; flex-direction:column; gap:6px;">
+        <div class="card-sm"><p>Loading surveillance watchlist...</p></div>
+      </div>
+    </div>
 
-  <!-- In-Browser Toast Notification Container (Phase 7) -->
-  <div class="toast-container" id="toastContainer"></div>
+    <!-- Live Alerts Pane -->
+    <div id="pane-alerts" class="d-pane" style="display: none; flex-direction: column; gap: 8px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+        <span style="font-size:11px; color:var(--mu);">Live market alerts &amp; signal transitions</span>
+        <button class="tg" id="btnDismissAllAlerts" style="padding:2px 8px; font-size:10px;">Dismiss All</button>
+      </div>
+      <div id="alerts-items" style="display:flex; flex-direction:column; gap:6px;">
+        <div class="card-sm"><p>No alerts triggered yet in this session.</p></div>
+      </div>
+    </div>
 
-  <script src="/static/app.js?v=3.6"></script>
-  <script>
-    // Fallback links if opened directly via local file: protocol
-    if (window.location.protocol === 'file:') {
-      const v2Btn = document.getElementById('btnOpenV2');
-      if (v2Btn) v2Btn.href = 'smc-workstation-v2.html';
-      const paperBtn = document.getElementById('btnOpenPaper');
-      if (paperBtn) paperBtn.href = 'paper.html';
-    }
-  </script>
+    <!-- Liquidity Radar Pane -->
+    <div id="pane-radar" class="d-pane" style="display: none; flex-direction: column; gap: 8px;">
+      <div class="card-sm" style="border-left: 3px solid var(--purp);">
+        <b>Hidden Liquidity Pool Detection</b>
+        <p>Clusters of stops detected near equal highs/lows and significant multi-touch swing boundaries.</p>
+      </div>
+      <div id="radar-items" style="display:flex; flex-direction:column; gap:6px;">
+        <div class="card-sm"><p>Scanning order-flow liquidity pools...</p></div>
+      </div>
+    </div>
+
+    <!-- Events Feed Pane -->
+    <div id="pane-events" class="d-pane" style="display: none; flex-direction: column; gap: 8px;">
+      <div class="card-sm" style="border-left: 3px solid var(--bl);">
+        <b>Live Structural Event Log</b>
+        <p>Chronological feed of key-level touches, liquidity sweeps, and BOS/CHoCH confirmations.</p>
+      </div>
+      <div id="events-items" style="display:flex; flex-direction:column; gap:6px;">
+        <div class="card-sm"><p>No structural events triggered in this session yet.</p></div>
+      </div>
+    </div>
+  </div>
+</aside>
+
+<!-- Floating Toast Notifications -->
+<div id="toastContainer" class="toast-container"></div>
+
+<script src="/static/lightweight-charts.js"></script>
+<script src="/static/app.js?v=4.5"></script>
 </body>
 </html>

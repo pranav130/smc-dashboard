@@ -78,9 +78,9 @@ class LiquidityZone(BaseModel):
     
     # Timestamps
     first_detected_time: int
-    first_detected_ist: str
+    first_detected_ist: str = ""
     last_updated_time: int
-    last_updated_ist: str
+    last_updated_ist: str = ""
     
     # Sweep details
     sweep: SweepRecord = Field(default_factory=SweepRecord)
@@ -269,8 +269,8 @@ def _create_zone_from_cluster(
     times = [item["time"] for item in cluster_items]
     first_time = min(times)
     last_time = max(times)
-    first_ist = next((i["ist_time"] for i in cluster_items if i["time"] == first_time), "")
-    last_ist = next((i["ist_time"] for i in cluster_items if i["time"] == last_time), "")
+    first_ist = next((i.get("ist_time") for i in cluster_items if i.get("time") == first_time and i.get("ist_time")), "") or ""
+    last_ist = next((i.get("ist_time") for i in cluster_items if i.get("time") == last_time and i.get("ist_time")), "") or ""
 
     # Supporting sources and timeframes
     sources = list(set(item["source"] for item in cluster_items))

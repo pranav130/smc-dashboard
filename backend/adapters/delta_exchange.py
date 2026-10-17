@@ -30,9 +30,11 @@ logging.basicConfig(level=logging.INFO)
 TIMEFRAME_LIMITS = {
     "1D": 100,    # 100 days (exceeds 24h)
     "4H": 150,    # 25 days (exceeds 24h)
+    "2H": 150,    # 12.5 days (exceeds 24h)
     "1H": 200,    # 8.3 days (exceeds 24h)
     "30M": 200,   # 4.1 days (exceeds 24h)
     "15M": 300,   # 3.1 days (exceeds 24h)
+    "10M": 300,   # 2.1 days (exceeds 24h)
     "5M": 500,    # 41.6 hours (exceeds 24h)
     "1M": 1500,   # 25.0 hours (exceeds 24h)
 }
@@ -41,9 +43,11 @@ TIMEFRAME_LIMITS = {
 MIN_24H_CANDLES = {
     "1D": 2,      # >= 48 hours
     "4H": 7,      # >= 28 hours
+    "2H": 13,     # >= 26 hours
     "1H": 25,     # >= 25 hours
     "30M": 50,    # >= 25 hours
     "15M": 100,   # >= 25 hours
+    "10M": 145,   # >= 24.16 hours (144 = 24h)
     "5M": 300,    # >= 25 hours
     "1M": 1450,   # >= 24.16 hours (1440 min = 24h)
 }
@@ -71,9 +75,11 @@ class DeltaExchangeAdapter(BaseMarketDataAdapter):
         self.candles: Dict[str, List[Candle]] = {
             "1D": [],
             "4H": [],
+            "2H": [],
             "1H": [],
             "30M": [],
             "15M": [],
+            "10M": [],
             "5M": [],
             "1M": [],
         }
@@ -81,9 +87,11 @@ class DeltaExchangeAdapter(BaseMarketDataAdapter):
         self.forming_candles: Dict[str, Optional[Candle]] = {
             "1D": None,
             "4H": None,
+            "2H": None,
             "1H": None,
             "30M": None,
             "15M": None,
+            "10M": None,
             "5M": None,
             "1M": None,
         }
@@ -165,6 +173,12 @@ class DeltaExchangeAdapter(BaseMarketDataAdapter):
         if symbol is None:
             symbol = DEFAULT_SYMBOL
         tf_key = timeframe.upper()
+        if tf_key == "10M":
+            await self.fetch_historical_candles(symbol, "5M", limit=(limit or 300) * 2)
+            synth = self.get_candles("10M")
+            self.candles["10M"] = [c for c in synth if not c.is_forming]
+            return synth
+
         min_24h = MIN_24H_CANDLES.get(tf_key, 25)
         if limit is None:
             limit = TIMEFRAME_LIMITS.get(tf_key, 500)
@@ -460,11 +474,62 @@ class DeltaExchangeAdapter(BaseMarketDataAdapter):
     def get_confirmed_candles(self, timeframe: str) -> List[Candle]:
         """Return strictly confirmed (closed) candles only. Excludes forming candle."""
         tf = timeframe.upper()
+        if tf in ("2H", "10M"):
+            candles = [c for c in self.get_candles(tf) if not c.is_forming]
+            return candles
         return list(self.candles.get(tf, []))
 
     def get_candles(self, timeframe: str) -> List[Candle]:
         """Return full candle series including current forming candle."""
         tf = timeframe.upper()
+        if tf == "2H":
+            candles_1h = self.get_candles("1H")
+            if not candles_1h:
+                return []
+            candles_2h = []
+            buckets: Dict[int, List[Candle]] = {}
+            for c in candles_1h:
+                b_ts = (c.time // 7200) * 7200
+                if b_ts not in buckets:
+                    buckets[b_ts] = []
+                buckets[b_ts].append(c)
+            for b_ts in sorted(buckets.keys()):
+                group = buckets[b_ts]
+                candles_2h.append(Candle(
+                    time=b_ts,
+                    open=group[0].open,
+                    high=max(g.high for g in group),
+                    low=min(g.low for g in group),
+                    close=group[-1].close,
+                    volume=sum(g.volume for g in group),
+                    is_forming=any(g.is_forming for g in group)
+                ))
+            return candles_2h
+
+        if tf == "10M":
+            candles_5m = self.get_candles("5M")
+            if not candles_5m:
+                return []
+            candles_10m = []
+            buckets: Dict[int, List[Candle]] = {}
+            for c in candles_5m:
+                b_ts = (c.time // 600) * 600
+                if b_ts not in buckets:
+                    buckets[b_ts] = []
+                buckets[b_ts].append(c)
+            for b_ts in sorted(buckets.keys()):
+                group = buckets[b_ts]
+                candles_10m.append(Candle(
+                    time=b_ts,
+                    open=group[0].open,
+                    high=max(g.high for g in group),
+                    low=min(g.low for g in group),
+                    close=group[-1].close,
+                    volume=sum(g.volume for g in group),
+                    is_forming=any(g.is_forming for g in group)
+                ))
+            return candles_10m
+
         confirmed = list(self.candles.get(tf, []))
         forming = self.forming_candles.get(tf)
         if forming:

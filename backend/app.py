@@ -240,6 +240,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.middleware("http")
+async def add_no_cache_headers(request: Request, call_next):
+    response = await call_next(request)
+    if request.url.path.startswith("/static") or request.url.path == "/":
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+    return response
+
 # ==============================================================================
 # Health Check Endpoints (for Render, Railway, Load Balancer)
 # ==============================================================================
@@ -275,21 +284,213 @@ async def get_status(timeframe: str = Query("1H")):
     return get_current_status(timeframe)
 
 @app.get("/api/candles")
-async def get_candles(timeframe: str = Query("1H")):
-    tf = timeframe.upper()
-    candles = adapter.get_candles(tf)
-    min_count = MIN_24H_CANDLES.get(tf, 25)
+async def get_candles(
+    timeframe: Optional[str] = Query(None),
+    tf: Optional[str] = Query(None),
+    symbol: Optional[str] = Query(None),
+    format: Optional[str] = Query(None)
+):
+    selected_tf = (tf or timeframe or "1H").upper()
+    candles = adapter.get_candles(selected_tf)
+    min_count = MIN_24H_CANDLES.get(selected_tf, 25)
     if len(candles) < min_count:
         candles = await adapter.fetch_historical_candles(
-            DEFAULT_SYMBOL, tf, limit=TIMEFRAME_LIMITS.get(tf, 500)
+            DEFAULT_SYMBOL, selected_tf, limit=TIMEFRAME_LIMITS.get(selected_tf, 500)
         )
+
+    # Format items compatible with both template [{t,o,h,l,c,closed}] and existing dashboard [{time,open,...}]
+    items = [
+        {
+            "t": c.time,
+            "time": c.time,
+            "o": c.open,
+            "open": c.open,
+            "h": c.high,
+            "high": c.high,
+            "l": c.low,
+            "low": c.low,
+            "c": c.close,
+            "close": c.close,
+            "v": c.volume,
+            "volume": c.volume,
+            "closed": not c.is_forming,
+            "is_forming": c.is_forming
+        }
+        for c in candles
+    ]
+
+    # If called via template signature (?tf=... or ?format=array), return array directly
+    if tf is not None or format == "array":
+        return items
+
     return {
         "success": True,
         "symbol": DEFAULT_SYMBOL,
-        "timeframe": tf,
+        "timeframe": selected_tf,
         "count": len(candles),
         "candles": [c.model_dump() for c in candles]
     }
+
+@app.get("/api/signal")
+async def get_signal(
+    timeframe: Optional[str] = Query(None),
+    tf: Optional[str] = Query(None),
+    symbol: Optional[str] = Query(None)
+):
+    selected_tf = (tf or timeframe or "1H").upper()
+    candles_by_tf = {
+        k: adapter.get_candles(k)
+        for k in ["1D", "4H", "2H", "1H", "30M", "15M", "10M", "5M", "1M"]
+    }
+    status = get_current_status(selected_tf)
+    analysis = smc_engine.analyze_multi_timeframe(
+        candles_by_tf, selected_tf, is_stale=status.is_stale
+    )
+
+    terminal = analysis.get("terminal_state", {})
+    state = terminal.get("classification") or terminal.get("signal_state") or "WAIT_WATCH"
+    setup = terminal.get("setup") or analysis.get("active_setup") or {}
+
+    direction = None
+    raw_dir = str(setup.get("direction") or "").lower()
+    if "bull" in raw_dir or "long" in raw_dir:
+        direction = "long"
+    elif "bear" in raw_dir or "short" in raw_dir:
+        direction = "short"
+
+    entry = setup.get("entry_price") or setup.get("price") or setup.get("entry_zone_mid")
+    stop = setup.get("invalidation_price") or setup.get("stop_loss")
+    target1 = setup.get("target_price") or setup.get("target1")
+    target2 = setup.get("target2") or (round(target1 + (target1 - entry), 2) if (target1 and entry) else None)
+    targets = [t for t in [target1, target2] if t is not None]
+
+    now_ts = int(time.time())
+    expires_at = setup.get("expires_at") or (now_ts + 14400 if state in ["ACTIVE", "EXTREME"] else None)
+
+    # Structure & retracement
+    structure = analysis.get("market_structure_summary") or analysis.get("market_structure", "Neutral Market Structure")
+    retracement = analysis.get("retracement_summary") or analysis.get("retracement", "In Equilibrium Zone")
+
+    # Multi-timeframe bias map
+    market_state = analysis.get("market_state", {})
+    tf_data = market_state.get("timeframes", {})
+    bias_map = {}
+    for k in ["1d", "4h", "2h", "1h", "15m"]:
+        b = tf_data.get(k.upper(), {}).get("bias") or "Neutral"
+        bias_map[k] = str(b).capitalize()
+
+    # Liquidity & key levels with explicit HTF (4H/1D) and Current-TF separation
+    levels = []
+    seen_levels = set()
+
+    # 1. Higher-Timeframe FVGs (4H and 1D unmitigated gaps)
+    for f in (analysis.get("h4_fvgs") or []) + (analysis.get("daily_fvgs") or []):
+        if not f.get("mitigated"):
+            mid = round(float(f.get("midpoint", 0)), 2)
+            if mid > 0 and mid not in seen_levels:
+                seen_levels.add(mid)
+                f_tf = str(f.get("timeframe") or "4H").upper()
+                dir_str = str(f.get("direction") or "Bullish").capitalize()
+                levels.append({
+                    "kind": "FVG",
+                    "price": mid,
+                    "label": f"{f_tf} {dir_str} FVG (${f.get('bottom', 0):.2f}-${f.get('top', 0):.2f})",
+                    "tf": f_tf,
+                    "is_htf_fvg": True,
+                    "is_curr_fvg": False,
+                    "is_htf_level": False,
+                    "is_curr_level": False
+                })
+
+    # 2. Current Timeframe FVGs (unmitigated gaps from the active chart resolution)
+    for f in (analysis.get("timeframe_fvgs") or []):
+        if not f.get("mitigated"):
+            mid = round(float(f.get("midpoint", 0)), 2)
+            if mid > 0 and mid not in seen_levels:
+                seen_levels.add(mid)
+                f_tf = str(f.get("timeframe") or selected_tf).upper()
+                dir_str = str(f.get("direction") or "Bullish").capitalize()
+                is_htf = f_tf in ["1D", "4H", "1W"]
+                levels.append({
+                    "kind": "FVG",
+                    "price": mid,
+                    "label": f"{f_tf} {dir_str} FVG (${f.get('bottom', 0):.2f}-${f.get('top', 0):.2f})",
+                    "tf": f_tf,
+                    "is_htf_fvg": is_htf,
+                    "is_curr_fvg": not is_htf,
+                    "is_htf_level": False,
+                    "is_curr_level": False
+                })
+
+    # 3. Key Levels & Liquidity Pools
+    for l in (analysis.get("key_levels_summary") or []) + (analysis.get("liquidity_levels") or []):
+        p = round(float(l.get("price", 0)), 2)
+        if p <= 0 or p in seen_levels:
+            continue
+        seen_levels.add(p)
+        kind = str(l.get("type") or l.get("kind") or "POI").upper()
+        if "BSL" in kind: kind = "BSL"
+        elif "SSL" in kind: kind = "SSL"
+        elif "FVG" in kind: kind = "FVG"
+        elif "EQH" in kind: kind = "EQH"
+        elif "EQL" in kind: kind = "EQL"
+        elif "SUP" in kind or "SUPPORT" in kind: kind = "SUP"
+        elif "RES" in kind or "RESIST" in kind: kind = "RES"
+        else: kind = "RES" if p > status.current_price else "SUP"
+
+        label = str(l.get("name") or l.get("label") or kind)
+        l_tf = str(l.get("timeframe") or l.get("tf") or ("1D" if any(x in label.lower() for x in ["previous day", "previous week", "pdh", "pdl", "pwh", "pwl"]) else selected_tf)).upper()
+
+        is_fvg = (kind == "FVG")
+        is_htf_fvg = is_fvg and (l_tf in ["1D", "4H", "1W"] or "4h" in label.lower() or "1d" in label.lower() or "daily" in label.lower())
+        is_curr_fvg = is_fvg and not is_htf_fvg
+
+        is_htf_level = not is_fvg and (l_tf in ["1D", "4H", "1W"] or any(x in label.lower() for x in ["previous day", "previous week", "pdh", "pdl", "pwh", "pwl", "daily", "weekly", "institutional", "round 20", "round 80"]))
+        is_curr_level = not is_fvg and not is_htf_level
+
+        levels.append({
+            "kind": kind,
+            "price": p,
+            "label": label,
+            "tf": l_tf,
+            "is_htf_fvg": is_htf_fvg,
+            "is_curr_fvg": is_curr_fvg,
+            "is_htf_level": is_htf_level,
+            "is_curr_level": is_curr_level
+        })
+
+    # Confirmation checklist
+    checklist = []
+    raw_checklist = setup.get("confluence_checklist") or analysis.get("confirmation_checklist", [])
+    if isinstance(raw_checklist, list):
+        for item in raw_checklist:
+            if isinstance(item, dict):
+                checklist.append({
+                    "label": item.get("name") or item.get("label") or item.get("condition", "Condition"),
+                    "met": bool(item.get("met", False) or item.get("status") == "PASS")
+                })
+    if not checklist:
+        checklist = [
+            {"label": "HTF directional bias alignment", "met": direction is not None and bias_map.get("1h", "").lower() == direction},
+            {"label": "Valid SMC displacement / BOS", "met": state in ["ACTIVE", "EXTREME", "WATCH"]},
+            {"label": "Key POI retracement (FVG / S&R)", "met": state in ["ACTIVE", "EXTREME"]},
+            {"label": "Safety line & risk boundary intact", "met": not status.is_stale}
+        ]
+
+    return {
+        "state": state,
+        "direction": direction,
+        "entry": float(entry) if entry else None,
+        "stop": float(stop) if stop else None,
+        "targets": targets,
+        "expires_at": expires_at,
+        "structure": structure,
+        "retracement": retracement,
+        "bias": bias_map,
+        "levels": levels,
+        "checklist": checklist
+    }
+
 
 @app.get("/api/smc")
 async def get_smc_analysis(
@@ -724,7 +925,14 @@ if os.path.exists(frontend_dir):
 async def serve_index():
     index_path = os.path.join(frontend_dir, "index.html")
     if os.path.exists(index_path):
-        return FileResponse(index_path)
+        return FileResponse(
+            index_path,
+            headers={
+                "Cache-Control": "no-cache, no-store, must-revalidate",
+                "Pragma": "no-cache",
+                "Expires": "0"
+            }
+        )
     return {"message": "SMC Dashboard Frontend building..."}
 
 @app.get("/paper")

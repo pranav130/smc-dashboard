@@ -188,36 +188,82 @@ function cycleTheme() {
 // --------------------------------------------------------------------------
 // 1. Timeframe Navigation Setup
 // --------------------------------------------------------------------------
+const SUPPORTED_TFS = ["1D", "4H", "2H", "1H", "30M", "15M", "10M", "5M"];
+
+function setTimeframe(newTf) {
+  if (!newTf || newTf === tf) return;
+  tf = newTf;
+
+  // 1. Sync header timeframe buttons
+  const headerContainer = $("tfs");
+  if (headerContainer) {
+    [...headerContainer.querySelectorAll("button[data-tf]")].forEach((b) => {
+      b.classList.toggle("on", b.dataset.tf === newTf);
+    });
+  }
+
+  // 2. Sync chart toolbar timeframe buttons (visible in normal and fullscreen)
+  const chartTfsContainer = $("chartTfs");
+  if (chartTfsContainer) {
+    [...chartTfsContainer.querySelectorAll("button[data-tf]")].forEach((b) => {
+      b.classList.toggle("on", b.dataset.tf === newTf);
+    });
+  }
+
+  // 3. Update legend symbol & timeframe indicator
+  if ($("leg-tf")) $("leg-tf").textContent = newTf;
+
+  // 4. Update layers current timeframe label
+  if ($("layerCurTf")) $("layerCurTf").textContent = newTf;
+
+  // 5. Reset pan offset & auto-fit chart view
+  panOffset = 0;
+  if (lwChart) {
+    setTimeout(() => {
+      if (lwChart) lwChart.timeScale().fitContent();
+    }, 150);
+  }
+
+  // 6. Fetch new candles and repaint
+  load();
+}
+
 function initTimeframeBar() {
   const container = $("tfs");
-  if (!container) return;
-  // Primary trading timeframes prominently presented
-  const supported = ["1D", "4H", "2H", "1H", "30M", "15M", "10M", "5M"];
-  container.innerHTML = supported
-    .map(
+  if (container) {
+    container.innerHTML = SUPPORTED_TFS.map(
       (k) =>
         `<button data-tf="${k}" class="${k === tf ? "on" : ""}">${k}</button>`
-    )
-    .join("");
+    ).join("");
+
+    container.onclick = (e) => {
+      const btn = e.target.closest("button[data-tf]");
+      if (btn && btn.dataset.tf) {
+        setTimeframe(btn.dataset.tf);
+      }
+    };
+  }
+
+  const chartTfs = $("chartTfs");
+  if (chartTfs) {
+    chartTfs.innerHTML = `
+      <span class="chart-tf-label">TF:</span>
+      ${SUPPORTED_TFS.map(
+        (k) =>
+          `<button data-tf="${k}" class="${k === tf ? "on" : ""}" title="Switch chart to ${k}">${k}</button>`
+      ).join("")}
+    `;
+
+    chartTfs.onclick = (e) => {
+      const btn = e.target.closest("button[data-tf]");
+      if (btn && btn.dataset.tf) {
+        setTimeframe(btn.dataset.tf);
+      }
+    };
+  }
 
   if ($("layerCurTf")) $("layerCurTf").textContent = tf;
-
-  container.onclick = (e) => {
-    const targetTf = e.target.dataset.tf;
-    if (!targetTf || targetTf === tf) return;
-    tf = targetTf;
-    if ($("layerCurTf")) $("layerCurTf").textContent = tf;
-    [...container.children].forEach((b) =>
-      b.classList.toggle("on", b.dataset.tf === targetTf)
-    );
-    panOffset = 0;
-    if (lwChart) {
-      setTimeout(() => {
-        if (lwChart) lwChart.timeScale().fitContent();
-      }, 150);
-    }
-    load();
-  };
+  if ($("leg-tf")) $("leg-tf").textContent = tf;
 }
 
 // --------------------------------------------------------------------------
@@ -915,6 +961,7 @@ function draw() {
         if ($("leg-l")) $("leg-l").textContent = f(lc.l || lc.low);
         if ($("leg-c")) $("leg-c").textContent = f(lc.c || lc.close);
         if ($("leg-v")) $("leg-v").textContent = lc.v || lc.volume || 0;
+        if ($("leg-tf")) $("leg-tf").textContent = tf;
       }
       return;
     }
@@ -1357,6 +1404,14 @@ function setupChartEvents() {
     if (btnHeaderFs) {
       btnHeaderFs.textContent = on ? "✕ Exit Fullscreen" : "⛶ Fullscreen";
       btnHeaderFs.classList.toggle("on", on);
+    }
+    if ($("leg-tf")) $("leg-tf").textContent = tf;
+    if ($("layerCurTf")) $("layerCurTf").textContent = tf;
+    const chartTfsContainer = $("chartTfs");
+    if (chartTfsContainer) {
+      [...chartTfsContainer.querySelectorAll("button[data-tf]")].forEach((b) => {
+        b.classList.toggle("on", b.dataset.tf === tf);
+      });
     }
     const updateSize = () => {
       const container = $("chartContainer");

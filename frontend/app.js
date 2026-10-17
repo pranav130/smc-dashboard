@@ -216,11 +216,16 @@ function setTimeframe(newTf) {
   // 4. Update layers current timeframe label
   if ($("layerCurTf")) $("layerCurTf").textContent = newTf;
 
-  // 5. Reset pan offset & auto-fit chart view
+  // 5. Reset pan offset & set visible logical range matching V2
   panOffset = 0;
   if (lwChart) {
     setTimeout(() => {
-      if (lwChart) lwChart.timeScale().fitContent();
+      if (lwChart && data && data.length) {
+        const n = data.length;
+        lwChart.timeScale().setVisibleLogicalRange({ from: Math.max(0, n - 140), to: n + 10 });
+      } else if (lwChart) {
+        lwChart.timeScale().fitContent();
+      }
     }, 150);
   }
 
@@ -718,7 +723,17 @@ function initLightweightChart() {
       borderColor: cfg.borderColor,
       timeVisible: true,
       secondsVisible: false,
-      rightOffset: 12
+      rightOffset: 10,
+      tickMarkFormatter: (t, type) => {
+        // Labels in IST (+5:30) matching SMC Workstation V2 & Delta Exchange India
+        const d = new Date((t + 19800) * 1000);
+        const p = (n) => String(n).padStart(2, "0");
+        const M = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+        if (type === 0) return String(d.getUTCFullYear());
+        if (type === 1) return M[d.getUTCMonth()];
+        if (type === 2) return `${d.getUTCDate()} ${M[d.getUTCMonth()]}`;
+        return `${p(d.getUTCHours())}:${p(d.getUTCMinutes())}`;
+      }
     },
     handleScale: {
       axisPressedMouseMove: {
@@ -740,7 +755,13 @@ function initLightweightChart() {
     },
     crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
     localization: {
-      priceFormatter: (p) => Number(p).toFixed(2)
+      priceFormatter: (p) => Number(p).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+      timeFormatter: (t) => {
+        const d = new Date((t + 19800) * 1000);
+        const p = (n) => String(n).padStart(2, "0");
+        const M = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+        return `${d.getUTCDate()} ${M[d.getUTCMonth()]} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())} IST`;
+      }
     }
   });
 
@@ -838,6 +859,12 @@ function draw() {
       }
       formatted.sort((a, b) => a.time - b.time);
       lwSeries.setData(formatted);
+
+      if (!window._initialRangeSet && formatted.length) {
+        window._initialRangeSet = true;
+        const n = formatted.length;
+        lwChart.timeScale().setVisibleLogicalRange({ from: Math.max(0, n - 140), to: n + 10 });
+      }
 
       // Volume Series Handling (Layer: Volume)
       if (layers.volume) {

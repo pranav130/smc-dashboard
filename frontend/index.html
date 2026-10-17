@@ -285,34 +285,46 @@
       font-weight: 700;
       box-shadow: 0 0 6px rgba(47, 155, 255, 0.4);
     }
-    canvas {
-      flex: 1;
+    .chart-stage {
+      position: relative;
+      flex: 1 1 0%;
+      min-height: 280px;
       width: 100%;
-      min-height: 320px;
+      overflow: hidden;
+    }
+    #chartContainer {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+    }
+    canvas#cv {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
       display: block;
       cursor: crosshair;
     }
     .chart-resizer {
-      height: 14px;
+      height: 10px;
       background: var(--pn);
       border-top: 1px solid var(--bd);
       cursor: row-resize;
       width: 100%;
-      position: absolute;
-      bottom: 0;
-      left: 0;
-      right: 0;
-      z-index: 15;
+      flex-shrink: 0;
       display: flex;
       justify-content: center;
       align-items: center;
       user-select: none;
       transition: background 0.15s ease;
+      position: relative;
+      z-index: 5;
     }
     .chart-resizer::after {
       content: '';
       width: 56px;
-      height: 4px;
+      height: 3px;
       border-radius: 2px;
       background: var(--mu);
       transition: background 0.15s ease, width 0.15s ease;
@@ -341,13 +353,7 @@
       inset: 0 !important;
       padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px) !important;
     }
-    #chartContainer {
-      flex: 1;
-      width: 100%;
-      min-height: 320px;
-      position: relative;
-    }
-    #chartwrap:fullscreen #chartContainer, #chartwrap:-webkit-full-screen #chartContainer, #chartwrap.maxed #chartContainer {
+    #chartwrap:fullscreen .chart-stage, #chartwrap:-webkit-full-screen .chart-stage, #chartwrap.maxed .chart-stage {
       flex: 1 1 0% !important;
       height: auto !important;
       min-height: 0 !important;
@@ -355,10 +361,17 @@
       width: 100% !important;
       overflow: hidden !important;
     }
+    #chartwrap:fullscreen #chartContainer, #chartwrap:-webkit-full-screen #chartContainer, #chartwrap.maxed #chartContainer {
+      position: absolute !important;
+      inset: 0 !important;
+      width: 100% !important;
+      height: 100% !important;
+    }
     #chartwrap:fullscreen canvas#cv, #chartwrap:-webkit-full-screen canvas#cv, #chartwrap.maxed canvas#cv {
-      flex: 1 1 0% !important;
-      height: auto !important;
-      min-height: 0 !important;
+      position: absolute !important;
+      inset: 0 !important;
+      width: 100% !important;
+      height: 100% !important;
     }
     #chartwrap:fullscreen .chart-resizer, #chartwrap:-webkit-full-screen .chart-resizer, #chartwrap.maxed .chart-resizer {
       display: none !important;
@@ -853,16 +866,19 @@
         </button>
       </div>
     </div>
-    <div id="chartContainer"></div>
-    <canvas id="cv" style="display:none;"></canvas>
-    <div class="chart-resizer" id="chartResizer" title="Drag up or down to resize chart height"></div>
-    <div id="overlay">
-      <div>
-        <div id="ovt" style="font-size:16px; font-weight:700">Connecting to Delta Exchange Feed...</div>
-        <div id="ovs" style="color:var(--mu); margin:6px 0 12px">Awaiting initial market candles.</div>
-        <button class="btn" id="demo">Load labelled sample data</button>
+    <!-- Chart Stage (Matching SMC Workstation V2 Structure) -->
+    <div class="chart-stage" id="chartStage">
+      <div id="chartContainer"></div>
+      <canvas id="cv" style="display:none;"></canvas>
+      <div id="overlay">
+        <div>
+          <div id="ovt" style="font-size:16px; font-weight:700">Connecting to Delta Exchange Feed...</div>
+          <div id="ovs" style="color:var(--mu); margin:6px 0 12px">Awaiting initial market candles.</div>
+          <button class="btn" id="demo">Load labelled sample data</button>
+        </div>
       </div>
     </div>
+    <div class="chart-resizer" id="chartResizer" title="Drag up or down to resize chart height"></div>
   </main>
 
   <!-- RIGHT COLUMN -->
@@ -989,6 +1005,6 @@
 <div id="toastContainer" class="toast-container"></div>
 
 <script src="/static/lightweight-charts.js"></script>
-<script src="/static/app.js?v=5.0"></script>
+<script src="/static/app.js?v=5.1"></script>
 </body>
 </html>

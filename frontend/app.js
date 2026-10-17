@@ -1728,6 +1728,104 @@ async function fetchAlerts() {
   } catch (err) {
     console.warn("Failed to fetch alerts:", err);
   }
+}
+
+async function acknowledgeAlert(alertId) {
+  try {
+    await fetch(`${CFG.alertsAck}?alert_id=${encodeURIComponent(alertId)}`, { method: "POST" });
+    fetchAlerts();
+  } catch (err) {
+    console.error("Error acknowledging alert:", err);
+  }
+}
+
+async function dismissAllAlerts() {
+  try {
+    await fetch(`${CFG.alertsAck}?dismiss_all=true`, { method: "POST" });
+    fetchAlerts();
+    showToast("Alerts", "All alerts dismissed", "ok");
+  } catch (err) {
+    console.error("Error dismissing alerts:", err);
+  }
+}
+
+function renderAlertsList(alerts) {
+  const container = $("alerts-items");
+  if (!container) return;
+  if (!alerts || !alerts.length) {
+    container.innerHTML = `<div class="card-sm"><p>No alerts recorded yet in this session.</p></div>`;
+    return;
+  }
+  container.innerHTML = alerts.slice(0, 35).map((a) => {
+    const sev = a.severity || (a.is_active ? "warn" : "ok");
+    const badgeClass = sev === "danger" || sev === "bad" ? "b-bad" : (sev === "warn" ? "b-warn" : "b-ok");
+    const timeStr = a.timestamp ? new Date(a.timestamp * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : "";
+    return `
+      <div class="card-sm" style="border-left: 3px solid ${sev === 'danger' || sev === 'bad' ? 'var(--dn)' : (sev === 'warn' ? 'var(--am)' : 'var(--up)')}; display:flex; flex-direction:column; gap:4px;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <span class="badge ${badgeClass}">${a.alert_type || a.severity || "ALERT"}</span>
+          <small style="color:var(--mu); font-size:10px;">${timeStr}</small>
+        </div>
+        <b style="font-size:12px; margin-top:2px;">${a.title || a.message || "Alert"}</b>
+        <p style="font-size:11px; color:var(--mu);">${a.description || a.text || a.message || ""}</p>
+        ${!a.acknowledged ? `
+          <div style="display:flex; justify-content:flex-end; margin-top:4px;">
+            <button class="tg btn-ack" data-id="${a.id}" style="padding:1px 7px; font-size:9.5px;">Acknowledge</button>
+          </div>
+        ` : `<div style="font-size:9.5px; color:var(--mu); text-align:right;">Acknowledged ✓</div>`}
+      </div>
+    `;
+  }).join("");
+
+  container.querySelectorAll(".btn-ack").forEach((btn) => {
+    btn.onclick = () => acknowledgeAlert(btn.dataset.id);
+  });
+}
+
+// --------------------------------------------------------------------------
+// 12b. Zone Insights & Persistent Reliability Engine
+// --------------------------------------------------------------------------
+async function fetchInsights() {
+  try {
+    const res = await fetch(CFG.insights);
+    if (!res.ok) return;
+    const json = await res.json();
+
+    if ($("ins-reliability")) {
+      $("ins-reliability").textContent = `${f(json.system_average_reliability, 1)}%`;
+    }
+    if ($("ins-high-conviction")) {
+      $("ins-high-conviction").textContent = `${json.high_conviction_count || 0} Zones`;
+    }
+
+    const container = $("insights-zones");
+    if (!container) return;
+
+    const zones = json.top_performing_zones || [];
+    if (!zones.length) {
+      container.innerHTML = `<div class="card-sm"><p>Accumulating institutional zone memory. As price tests key levels, reliability scores will automatically calibrate.</p></div>`;
+      return;
+    }
+
+    container.innerHTML = zones.slice(0, 10).map((z) => {
+      const isA = (z.grade || "").startsWith("A");
+      const gradeCol = z.grade === "A+" ? "var(--am)" : (isA ? "var(--up)" : "var(--bl)");
+      return `
+        <div class="card-sm" style="border-left: 3px solid ${gradeCol};">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <b>${z.timeframe || ""} ${z.level_type || "POI"} @ ${f(z.price)}</b>
+            <span class="copilot-grade" style="font-size:9.5px; border-color:${gradeCol}; color:${gradeCol};">${z.grade || "A"} [${Math.round(z.reliability_score || 80)}%]</span>
+          </div>
+          <p style="font-size:11px; margin-top:2px;">
+            ${z.reactions || 0} successful bounces / ${z.touches || 1} touches · Sweeps: ${z.sweeps || 0} · Invalidations: ${z.invalidations || 0}
+          </p>
+        </div>
+      `;
+    }).join("");
+  } catch (err) {
+    console.warn("Failed to fetch insights:", err);
+  }
+}
 
 
 // --------------------------------------------------------------------------

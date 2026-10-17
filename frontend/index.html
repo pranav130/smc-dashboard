@@ -278,14 +278,38 @@
       position: relative;
     }
     #chartwrap:fullscreen #chartContainer, #chartwrap:-webkit-full-screen #chartContainer, #chartwrap.maxed #chartContainer {
-      height: calc(100vh - 36px) !important;
-      min-height: calc(100vh - 36px) !important;
+      flex: 1 1 0% !important;
+      height: auto !important;
+      min-height: 0 !important;
+      max-height: none !important;
+      width: 100% !important;
+      overflow: hidden !important;
+    }
+    #chartwrap:fullscreen canvas#cv, #chartwrap:-webkit-full-screen canvas#cv, #chartwrap.maxed canvas#cv {
+      flex: 1 1 0% !important;
+      height: auto !important;
+      min-height: 0 !important;
     }
     #chartwrap:fullscreen .chart-resizer, #chartwrap:-webkit-full-screen .chart-resizer, #chartwrap.maxed .chart-resizer {
       display: none !important;
     }
     body.chart-max {
       overflow: hidden;
+    }
+
+    /* Right price bar (ns-resize) & bottom horizontal time bar (ew-resize) cursor shapes */
+    #chartContainer table tr:first-child td:last-child,
+    #chartContainer table tr:first-child td:last-child canvas,
+    .tv-lightweight-charts table tr:first-child td:last-child,
+    .tv-lightweight-charts table tr:first-child td:last-child canvas {
+      cursor: ns-resize !important;
+    }
+
+    #chartContainer table tr:last-child td:first-child,
+    #chartContainer table tr:last-child td:first-child canvas,
+    .tv-lightweight-charts table tr:last-child td:first-child,
+    .tv-lightweight-charts table tr:last-child td:first-child canvas {
+      cursor: ew-resize !important;
     }
     #overlay {
       position: absolute;
@@ -885,6 +909,6 @@
 <div id="toastContainer" class="toast-container"></div>
 
 <script src="/static/lightweight-charts.js"></script>
-<script src="/static/app.js?v=4.8"></script>
+<script src="/static/app.js?v=4.9"></script>
 </body>
 </html>

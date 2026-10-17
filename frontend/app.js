@@ -674,11 +674,31 @@ function initLightweightChart() {
       secondsVisible: false,
       rightOffset: 12
     },
+    handleScale: {
+      axisPressedMouseMove: {
+        time: true,
+        price: true
+      },
+      axisDoubleClickReset: {
+        time: true,
+        price: true
+      },
+      mouseWheel: true,
+      pinch: true
+    },
+    handleScroll: {
+      mouseWheel: true,
+      pressedMouseMove: true,
+      horzTouchDrag: true,
+      vertTouchDrag: true
+    },
     crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
     localization: {
       priceFormatter: (p) => Number(p).toFixed(2)
     }
   });
+
+  setupScaleCursorHandler(container);
 
   lwSeries = lwChart.addCandlestickSeries({
     upColor: cfg.candleUp,
@@ -713,6 +733,35 @@ function initLightweightChart() {
   });
 
   return true;
+}
+
+function setupScaleCursorHandler(container) {
+  if (!container || container._cursorHandlerAttached) return;
+  container._cursorHandlerAttached = true;
+
+  const priceScaleWidth = 65;
+  const timeScaleHeight = 28;
+
+  container.addEventListener("mousemove", (e) => {
+    const r = container.getBoundingClientRect();
+    const x = e.clientX - r.left;
+    const y = e.clientY - r.top;
+
+    const onRight = x >= r.width - priceScaleWidth && y < r.height - timeScaleHeight;
+    const onBottom = y >= r.height - timeScaleHeight && x < r.width - priceScaleWidth;
+
+    if (onRight) {
+      container.style.cursor = "ns-resize";
+    } else if (onBottom) {
+      container.style.cursor = "ew-resize";
+    } else {
+      container.style.cursor = "";
+    }
+  }, { passive: true });
+
+  container.addEventListener("mouseleave", () => {
+    container.style.cursor = "";
+  });
 }
 
 function draw() {
@@ -1309,16 +1358,20 @@ function setupChartEvents() {
       btnHeaderFs.textContent = on ? "✕ Exit Fullscreen" : "⛶ Fullscreen";
       btnHeaderFs.classList.toggle("on", on);
     }
-    if (lwChart) {
+    const updateSize = () => {
       const container = $("chartContainer");
-      if (container) {
+      if (lwChart && container) {
         const bounds = container.getBoundingClientRect();
-        lwChart.applyOptions({ width: bounds.width, height: bounds.height });
+        if (bounds.width > 0 && bounds.height > 0) {
+          lwChart.applyOptions({ width: Math.floor(bounds.width), height: Math.floor(bounds.height) });
+        }
+      } else {
+        draw();
       }
-      lwChart.timeScale().fitContent();
-    } else {
-      draw();
-    }
+    };
+    updateSize();
+    setTimeout(updateSize, 80);
+    setTimeout(updateSize, 250);
   }
 
   if (btnFs) btnFs.onclick = toggleFull;
@@ -1340,6 +1393,10 @@ function setupChartEvents() {
 
   // 4. Interactive Canvas Mouse Events (Pan, Zoom, Y-Axis Price Scaling, Dynamic Cursors)
   const pr = 64; // right price scale width
+  const pb = 24; // bottom time scale height
+  let isDraggingXAxis = false;
+  let dragStartXAxis = 0;
+  let dragStartCandleCount = 90;
 
   cv.addEventListener("mousemove", (e) => {
     const r = cv.getBoundingClientRect();
@@ -1353,6 +1410,13 @@ function setupChartEvents() {
         0.15,
         Math.min(8.0, dragStartMultiplier * (1 + deltaY / 120))
       );
+    } else if (isDraggingXAxis) {
+      cv.style.cursor = "ew-resize";
+      const deltaX = dragStartXAxis - e.clientX;
+      viewCandleCount = Math.max(
+        15,
+        Math.min(300, Math.round(dragStartCandleCount * (1 + deltaX / 140)))
+      );
     } else if (isDragging) {
       cv.style.cursor = "grabbing";
       const deltaX = e.clientX - dragStartX;
@@ -1363,8 +1427,10 @@ function setupChartEvents() {
         Math.min((data ? data.length : 100) - 15, dragStartPan + candlesShift)
       );
     } else {
-      if (mouseX >= r.width - pr) {
+      if (mouseX >= r.width - pr && mouseY < r.height - pb) {
         cv.style.cursor = "ns-resize";
+      } else if (mouseY >= r.height - pb && mouseX < r.width - pr) {
+        cv.style.cursor = "ew-resize";
       } else {
         cv.style.cursor = "crosshair";
       }
@@ -1375,7 +1441,7 @@ function setupChartEvents() {
   cv.addEventListener("mouseleave", () => {
     mouseX = -1;
     mouseY = -1;
-    if (!isDragging && !isDraggingYAxis) {
+    if (!isDragging && !isDraggingYAxis && !isDraggingXAxis) {
       cv.style.cursor = "crosshair";
     }
     draw();
@@ -1384,12 +1450,19 @@ function setupChartEvents() {
   cv.addEventListener("mousedown", (e) => {
     const r = cv.getBoundingClientRect();
     const curX = e.clientX - r.left;
-    if (curX >= r.width - pr) {
+    const curY = e.clientY - r.top;
+    if (curX >= r.width - pr && curY < r.height - pb) {
       // Clicked on right price scale -> drag up/down to stretch/compress price scale
       isDraggingYAxis = true;
       dragStartY = e.clientY;
       dragStartMultiplier = priceScaleMultiplier;
       cv.style.cursor = "ns-resize";
+    } else if (curY >= r.height - pb && curX < r.width - pr) {
+      // Clicked on bottom horizontal bar -> drag left/right to stretch/compress time scale
+      isDraggingXAxis = true;
+      dragStartXAxis = e.clientX;
+      dragStartCandleCount = viewCandleCount;
+      cv.style.cursor = "ew-resize";
     } else {
       isDragging = true;
       dragStartX = e.clientX;
@@ -1402,9 +1475,13 @@ function setupChartEvents() {
   cv.addEventListener("dblclick", (e) => {
     const r = cv.getBoundingClientRect();
     const curX = e.clientX - r.left;
+    const curY = e.clientY - r.top;
     if (curX >= r.width - pr) {
       // Double click right price scale to reset vertical price stretch
       priceScaleMultiplier = 1.0;
+    } else if (curY >= r.height - pb) {
+      // Double click bottom horizontal bar to reset horizontal zoom
+      viewCandleCount = 90;
     } else {
       // Double click chart body to reset horizontal candle zoom & pan
       viewCandleCount = 90;
@@ -1414,9 +1491,10 @@ function setupChartEvents() {
   });
 
   window.addEventListener("mouseup", () => {
-    if (isDragging || isDraggingYAxis) {
+    if (isDragging || isDraggingYAxis || isDraggingXAxis) {
       isDragging = false;
       isDraggingYAxis = false;
+      isDraggingXAxis = false;
       if (cv) cv.style.cursor = "crosshair";
     }
   });

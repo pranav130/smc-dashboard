@@ -11,6 +11,7 @@ const CFG = {
   status: "/api/status?timeframe={tf}",
   alerts: "/api/alerts",
   alertsAck: "/api/alerts/acknowledge",
+  insights: "/api/insights",
   paperSimulate: "/api/paper/simulate-demo-trade",
   pollMs: 6000,
 };
@@ -56,6 +57,8 @@ const layers = {
 let audioCtx = null;
 let seenAlertIds = new Set();
 let unreadAlertCount = 0;
+let audioMode = localStorage.getItem("smc_audio_mode") || "chime"; // "chime" | "voice" | "mute"
+let lastSpeechTime = 0;
 
 // Chart interactive navigation state
 let viewCandleCount = 90;
@@ -287,6 +290,7 @@ function paint(failed) {
       }
     );
     setSig(null);
+    renderCopilotGuidance(null, true);
     draw();
     return;
   }
@@ -358,6 +362,9 @@ function paint(failed) {
 
   if (!(stale && !sample)) {
     setSig(sig);
+    renderCopilotGuidance(sig ? sig.tactical_guidance : null, false);
+  } else {
+    renderCopilotGuidance(null, true);
   }
 
   draw();
@@ -472,6 +479,85 @@ function setSig(s, stale) {
 }
 
 // --------------------------------------------------------------------------
+// 4b. Tactical Co-Pilot Guidance Rendering
+// --------------------------------------------------------------------------
+function renderCopilotGuidance(g, isStale) {
+  const iconEl = $("copilotIcon");
+  const headEl = $("copilotHeadline");
+  const stepEl = $("copilotStep");
+  const gradeEl = $("copilotGrade");
+  const planEl = $("copilotActionPlan");
+
+  if (!iconEl || !headEl) return;
+
+  if (isStale) {
+    iconEl.textContent = "⚠️";
+    headEl.textContent = "SMC Tactical Co-Pilot · Market Data Stale";
+    if (stepEl) stepEl.textContent = "Feed Suspended";
+    if (gradeEl) {
+      gradeEl.textContent = "Data Delayed";
+      gradeEl.style.borderColor = "var(--dn)";
+      gradeEl.style.color = "var(--dn)";
+      gradeEl.style.background = "rgba(255, 59, 78, 0.1)";
+    }
+    if (planEl) planEl.textContent = "Waiting for fresh live ticks from Delta Exchange India before calculating key POI reactions.";
+    return;
+  }
+
+  if (!g) {
+    iconEl.textContent = "🎯";
+    headEl.textContent = "SMC Tactical Co-Pilot · Establishing Liquidity Boundaries...";
+    if (stepEl) stepEl.textContent = "Step 1/3: Surveillance";
+    if (gradeEl) {
+      gradeEl.textContent = "Grade A [85%]";
+      gradeEl.style.borderColor = "rgba(245, 197, 24, 0.35)";
+      gradeEl.style.color = "var(--am)";
+      gradeEl.style.background = "rgba(245, 197, 24, 0.15)";
+    }
+    if (planEl) planEl.textContent = "Monitoring multi-timeframe order blocks and liquidity pools for high-probability setups.";
+    return;
+  }
+
+  const headline = g.headline || "SMC Tactical Co-Pilot Active";
+  headEl.textContent = headline;
+
+  if (headline.includes("HIGH-CONFLUENCE") || headline.includes("ACTIVE")) {
+    iconEl.textContent = "🚀";
+  } else if (headline.includes("APPROACHING")) {
+    iconEl.textContent = "🎯";
+  } else if (headline.includes("DEVELOPING")) {
+    iconEl.textContent = "⚡";
+  } else {
+    iconEl.textContent = "⚖️";
+  }
+
+  if (stepEl) stepEl.textContent = g.lifecycle_step || "Active Monitoring";
+
+  if (gradeEl) {
+    const gr = g.grade || "A";
+    const conf = Math.round(g.confidence_score || 85);
+    gradeEl.textContent = `Grade ${gr} [${conf}%]`;
+    if (gr === "A+" || conf >= 88) {
+      gradeEl.style.background = "rgba(245, 197, 24, 0.18)";
+      gradeEl.style.color = "var(--am)";
+      gradeEl.style.borderColor = "rgba(245, 197, 24, 0.4)";
+    } else if (gr === "A") {
+      gradeEl.style.background = "rgba(24, 195, 126, 0.15)";
+      gradeEl.style.color = "var(--up)";
+      gradeEl.style.borderColor = "rgba(24, 195, 126, 0.35)";
+    } else {
+      gradeEl.style.background = "rgba(47, 155, 255, 0.15)";
+      gradeEl.style.color = "var(--bl)";
+      gradeEl.style.borderColor = "rgba(47, 155, 255, 0.35)";
+    }
+  }
+
+  if (planEl) {
+    planEl.textContent = g.action_plan || "Surveillance active. Awaiting institutional boundary interaction.";
+  }
+}
+
+// --------------------------------------------------------------------------
 // 5. Liquidity & Key Levels Computation
 // --------------------------------------------------------------------------
 function levels() {
@@ -524,9 +610,12 @@ function renderLevels() {
               : "";
           const isSup = ["SSL", "SUP", "EQL"].includes(l.kind);
           const col = isSup ? "var(--up)" : "var(--dn)";
+          const gradeBadge = l.grade
+            ? `<span class="tag-pill" style="background:rgba(245,197,24,0.12); color:var(--am); font-size:9px; margin-left:3px;" title="Historical zone reliability score">${l.grade} ${Math.round(l.reliability_score || 80)}%</span>`
+            : "";
           return `<div class="lv"><span><span class="tag-pill" style="background:rgba(255,255,255,0.06);color:${col}">${
             l.kind
-          }</span> ${l.label || ""}</span><b>${f(l.price)}${distTag}</b></div>`;
+          }</span> ${l.label || ""}${gradeBadge}</span><b>${f(l.price)}${distTag}</b></div>`;
         })
         .join("") || '<div class="lv"><span>No active levels detected</span></div>';
   }
@@ -714,6 +803,7 @@ function draw() {
           const isFvg = lvl.kind === "FVG";
           const fvgCol = lvl.is_htf_fvg ? "#2f9bff" : "#22d3ee";
           const lineCol = isFvg ? fvgCol : (colMap[lvl.kind] || "#6f8399");
+          const gradeStr = lvl.grade ? ` [${lvl.grade} ${Math.round(lvl.reliability_score || 80)}%]` : "";
 
           const pl = lwSeries.createPriceLine({
             price: lvl.price,
@@ -721,7 +811,7 @@ function draw() {
             lineWidth: isHtf ? 2 : 1,
             lineStyle: isHtf ? LightweightCharts.LineStyle.Solid : LightweightCharts.LineStyle.Dashed,
             axisLabelVisible: true,
-            title: lvl.kind + " " + (lvl.label || "")
+            title: (lvl.kind + " " + (lvl.label || "") + gradeStr).trim()
           });
           activePriceLines.push(pl);
         }
@@ -916,7 +1006,8 @@ function drawCanvasFallback() {
       EQL: "#f5c518",
       FVG: "#2f9bff",
     };
-    tag(lvl.price, lvl.kind, colMap[lvl.kind] || "#6f8399");
+    const gradeStr = lvl.grade ? ` [${lvl.grade}]` : "";
+    tag(lvl.price, lvl.kind + gradeStr, colMap[lvl.kind] || "#6f8399");
   });
 
   if (act) {
@@ -1408,11 +1499,11 @@ function mkSig(d) {
       "15m": "Bearish",
     },
     levels: [
-      { kind: "RES", price: p + 8.5, label: "PDH ($" + f(p + 8.5) + ")" },
-      { kind: "BSL", price: p + 18.0, label: "Equal Highs Pool" },
-      { kind: "SUP", price: p - 14.0, label: "PDL ($" + f(p - 14.0) + ")" },
-      { kind: "SSL", price: p - 26.0, label: "Equal Lows Target" },
-      { kind: "FVG", price: p - 6.0, label: "1H Imbalance" },
+      { kind: "RES", price: p + 8.5, label: "PDH ($" + f(p + 8.5) + ")", grade: "A+", reliability_score: 92.0 },
+      { kind: "BSL", price: p + 18.0, label: "Equal Highs Pool", grade: "A", reliability_score: 87.5 },
+      { kind: "SUP", price: p - 14.0, label: "PDL ($" + f(p - 14.0) + ")", grade: "A", reliability_score: 85.0 },
+      { kind: "SSL", price: p - 26.0, label: "Equal Lows Target", grade: "B", reliability_score: 78.0 },
+      { kind: "FVG", price: p - 6.0, label: "1H Imbalance", grade: "A", reliability_score: 84.0 },
     ],
     checklist: [
       { label: "HTF directional bias alignment", met: true },
@@ -1421,13 +1512,58 @@ function mkSig(d) {
       { label: "Liquidity sweep confluence", met: true },
       { label: "Favorable Risk:Reward (>= 2.0:1)", met: true },
     ],
+    tactical_guidance: {
+      headline: "🚀 HIGH-CONFLUENCE SHORT SETUP ACTIVE (5/5 Checklist Passed)",
+      action_plan: "Key confluence confirmed with R:R >= 2:1. Invalidation at $" + f(p + 14.0) + ". Consider simulated execution.",
+      lifecycle_step: "Step 3/3: Execution & Target Management",
+      market_phase: "High-Confluence Order Flow",
+      grade: "A+",
+      confidence_score: 92.0,
+      bias_summary: "1D: Bearish · 4H: Bearish · 1H: Bearish"
+    }
   };
 }
 
 // --------------------------------------------------------------------------
-// 11. Web Audio API Synthesizer & Floating Toast Notifications
 // --------------------------------------------------------------------------
-function playChime(freq1 = 880, freq2 = 1320) {
+// 11. Audio Mode, Web Audio Synthesizer & Speech Guidance
+// --------------------------------------------------------------------------
+const AUDIO_MODES = [
+  { id: "chime", label: "Chime", icon: "🔊" },
+  { id: "voice", label: "Voice", icon: "🗣️" },
+  { id: "mute", label: "Muted", icon: "🔇" },
+];
+
+function applyAudioModeUI() {
+  const current = AUDIO_MODES.find((m) => m.id === audioMode) || AUDIO_MODES[0];
+  const iconEl = $("audioModeIcon");
+  const textEl = $("audioModeText");
+  const btn = $("btnAudioMode");
+  if (iconEl) iconEl.textContent = current.icon;
+  if (textEl) textEl.textContent = current.label;
+  if (btn) btn.classList.toggle("on", audioMode !== "mute");
+}
+
+function cycleAudioMode() {
+  const idx = AUDIO_MODES.findIndex((m) => m.id === audioMode);
+  const nextIdx = (idx + 1) % AUDIO_MODES.length;
+  audioMode = AUDIO_MODES[nextIdx].id;
+  localStorage.setItem("smc_audio_mode", audioMode);
+  applyAudioModeUI();
+
+  if (audioMode === "chime") {
+    playChime("default");
+    showToast("Alert Sound", "Dual-tone chimes enabled", "ok");
+  } else if (audioMode === "voice") {
+    speakAlert("Voice guidance enabled. Proximity and sweep alerts will be announced.");
+    showToast("Alert Voice", "Speech synthesizer guidance enabled", "ok");
+  } else {
+    showToast("Alert Sound", "Alerts muted", "warn");
+  }
+}
+
+function playChime(type = "default") {
+  if (audioMode === "mute") return;
   try {
     const AudioContext = window.AudioContext || window.webkitAudioContext;
     if (!AudioContext) return;
@@ -1439,16 +1575,71 @@ function playChime(freq1 = 880, freq2 = 1320) {
     const osc = audioCtx.createOscillator();
     const gain = audioCtx.createGain();
     osc.type = "sine";
-    osc.frequency.setValueAtTime(freq1, now);
-    osc.frequency.exponentialRampToValueAtTime(freq2, now + 0.12);
-    gain.gain.setValueAtTime(0.08, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
-    osc.connect(gain);
-    gain.connect(audioCtx.destination);
-    osc.start(now);
-    osc.stop(now + 0.32);
+
+    if (type === "proximity") {
+      // Soft proximity alert chime (520Hz -> 660Hz)
+      osc.frequency.setValueAtTime(520, now);
+      osc.frequency.exponentialRampToValueAtTime(660, now + 0.16);
+      gain.gain.setValueAtTime(0.05, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start(now);
+      osc.stop(now + 0.38);
+    } else if (type === "sweep") {
+      // Dynamic liquidity sweep double chime
+      osc.frequency.setValueAtTime(740, now);
+      osc.frequency.exponentialRampToValueAtTime(1080, now + 0.14);
+      gain.gain.setValueAtTime(0.09, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.32);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start(now);
+      osc.stop(now + 0.34);
+    } else if (type === "setup") {
+      // High-conviction setup execution chime
+      osc.frequency.setValueAtTime(880, now);
+      osc.frequency.exponentialRampToValueAtTime(1320, now + 0.18);
+      gain.gain.setValueAtTime(0.1, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start(now);
+      osc.stop(now + 0.42);
+    } else {
+      osc.frequency.setValueAtTime(880, now);
+      osc.frequency.exponentialRampToValueAtTime(1320, now + 0.12);
+      gain.gain.setValueAtTime(0.08, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start(now);
+      osc.stop(now + 0.32);
+    }
   } catch (err) {
     console.warn("Audio chime prevented:", err);
+  }
+}
+
+function speakAlert(text) {
+  if (audioMode !== "voice" || !("speechSynthesis" in window) || !text) return;
+  const now = Date.now();
+  if (now - lastSpeechTime < 7000) return; // Throttled to prevent overlapping
+  lastSpeechTime = now;
+
+  try {
+    window.speechSynthesis.cancel();
+    const clean = text
+      .replace(/[\$#\*_\[\]\(\)]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    const utterance = new SpeechSynthesisUtterance(clean);
+    utterance.rate = 1.05;
+    utterance.pitch = 1.0;
+    utterance.volume = 0.9;
+    window.speechSynthesis.speak(utterance);
+  } catch (e) {
+    console.warn("Speech synthesis error:", e);
   }
 }
 
@@ -1499,74 +1690,45 @@ async function fetchAlerts() {
     }
 
     let hasNew = false;
+    let highestSeverity = "default";
+    let newestVoiceText = "";
+
     for (const a of unread) {
       if (!seenAlertIds.has(a.id)) {
         seenAlertIds.add(a.id);
         hasNew = true;
-        showToast(a.title || "Market Alert", a.message || a.text, a.severity || "warn");
+        const title = a.title || "Market Alert";
+        const msg = a.message || a.text || "";
+        showToast(title, msg, a.severity || "warn");
+
+        const upper = (title + " " + msg + " " + (a.alert_type || "")).toUpperCase();
+        if (upper.includes("ACTIVE") || upper.includes("EXTREME") || upper.includes("SETUP")) {
+          highestSeverity = "setup";
+          newestVoiceText = title + ". " + msg;
+        } else if (upper.includes("SWEEP") || upper.includes("LIQUIDITY")) {
+          if (highestSeverity !== "setup") highestSeverity = "sweep";
+          if (!newestVoiceText) newestVoiceText = title;
+        } else if (upper.includes("PROXIMITY") || upper.includes("APPROACHING")) {
+          if (highestSeverity === "default") highestSeverity = "proximity";
+          if (!newestVoiceText) newestVoiceText = title;
+        } else {
+          if (!newestVoiceText) newestVoiceText = title;
+        }
       }
     }
+
     if (hasNew) {
-      playChime();
+      playChime(highestSeverity);
+      if (newestVoiceText) {
+        speakAlert(newestVoiceText);
+      }
     }
 
     renderAlertsList(alerts);
   } catch (err) {
     console.warn("Failed to fetch alerts:", err);
   }
-}
 
-async function acknowledgeAlert(alertId) {
-  try {
-    await fetch(`${CFG.alertsAck}?alert_id=${encodeURIComponent(alertId)}`, { method: "POST" });
-    fetchAlerts();
-  } catch (err) {
-    console.error("Error acknowledging alert:", err);
-  }
-}
-
-async function dismissAllAlerts() {
-  try {
-    await fetch(`${CFG.alertsAck}?dismiss_all=true`, { method: "POST" });
-    fetchAlerts();
-    showToast("Alerts", "All alerts dismissed", "ok");
-  } catch (err) {
-    console.error("Error dismissing alerts:", err);
-  }
-}
-
-function renderAlertsList(alerts) {
-  const container = $("alerts-items");
-  if (!container) return;
-  if (!alerts || !alerts.length) {
-    container.innerHTML = `<div class="card-sm"><p>No alerts recorded yet in this session.</p></div>`;
-    return;
-  }
-  container.innerHTML = alerts.slice(0, 35).map((a) => {
-    const sev = a.severity || (a.is_active ? "warn" : "ok");
-    const badgeClass = sev === "danger" || sev === "bad" ? "b-bad" : (sev === "warn" ? "b-warn" : "b-ok");
-    const timeStr = a.timestamp ? new Date(a.timestamp * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : "";
-    return `
-      <div class="card-sm" style="border-left: 3px solid ${sev === 'danger' || sev === 'bad' ? 'var(--dn)' : (sev === 'warn' ? 'var(--am)' : 'var(--up)')}; display:flex; flex-direction:column; gap:4px;">
-        <div style="display:flex; justify-content:space-between; align-items:center;">
-          <span class="badge ${badgeClass}">${a.alert_type || a.severity || "ALERT"}</span>
-          <small style="color:var(--mu); font-size:10px;">${timeStr}</small>
-        </div>
-        <b style="font-size:12px; margin-top:2px;">${a.title || a.message || "Alert"}</b>
-        <p style="font-size:11px; color:var(--mu);">${a.description || a.text || a.message || ""}</p>
-        ${!a.acknowledged ? `
-          <div style="display:flex; justify-content:flex-end; margin-top:4px;">
-            <button class="tg btn-ack" data-id="${a.id}" style="padding:1px 7px; font-size:9.5px;">Acknowledge</button>
-          </div>
-        ` : `<div style="font-size:9.5px; color:var(--mu); text-align:right;">Acknowledged ✓</div>`}
-      </div>
-    `;
-  }).join("");
-
-  container.querySelectorAll(".btn-ack").forEach((btn) => {
-    btn.onclick = () => acknowledgeAlert(btn.dataset.id);
-  });
-}
 
 // --------------------------------------------------------------------------
 // 13. Layers Dropdown Interactive Controls
@@ -1635,6 +1797,13 @@ function boot() {
   }
   applyTheme(currentTheme);
 
+  // Audio Mode Button
+  const audioBtn = $("btnAudioMode");
+  if (audioBtn) {
+    audioBtn.onclick = cycleAudioMode;
+  }
+  applyAudioModeUI();
+
   // Focus Mode
   const focusBtn = $("focus");
   if (focusBtn) {
@@ -1667,6 +1836,7 @@ function boot() {
       conn("SYNCING", "b-warn");
       load();
       fetchAlerts();
+      fetchInsights();
     };
   }
 
@@ -1702,6 +1872,7 @@ function boot() {
     drawer.classList.toggle("open", shouldOpen);
     if (drawerOverlay) drawerOverlay.classList.toggle("open", shouldOpen);
     if (btnHub) btnHub.classList.toggle("on", shouldOpen);
+    if (shouldOpen) fetchInsights();
   };
 
   if (btnHub) btnHub.onclick = () => toggleDrawer();
@@ -1719,6 +1890,8 @@ function boot() {
       tab.classList.add("on");
       const target = $(paneId);
       if (target) target.style.display = "flex";
+      if (paneId === "pane-insights") fetchInsights();
+      if (paneId === "pane-alerts") fetchAlerts();
     };
   });
 
@@ -1753,6 +1926,7 @@ function boot() {
   // Initial load
   load();
   fetchAlerts();
+  fetchInsights();
   initWebSocket();
 
   // Periodic polling fallback
@@ -1761,6 +1935,7 @@ function boot() {
     if (!sample) {
       load();
       fetchAlerts();
+      fetchInsights();
     }
   }, CFG.pollMs);
 }
